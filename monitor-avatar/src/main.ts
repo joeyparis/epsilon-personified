@@ -87,8 +87,8 @@ app_el.innerHTML = `
         <label><input id="enable_dir_light" type="checkbox" checked /> Overhead (directional)</label>
         <label><input id="enable_ambient_light" type="checkbox" checked /> Ambient</label>
         <label><input id="enable_bounce_light" type="checkbox" checked /> Bounce (below)</label>
-        <label><input id="enable_talk_light_inner" type="checkbox" checked /> Talk spill (inner)</label>
-        <label><input id="enable_talk_light_eye" type="checkbox" checked /> Talk spill (eye)</label>
+        <label><input id="enable_talk_light_inner" type="checkbox" checked /> Talk spill (LEDs + booster)</label>
+        <label><input id="enable_talk_light_eye" type="checkbox" checked /> Talk spill (eye front/back)</label>
         <label><input id="enable_axes_helper" type="checkbox" checked /> Debug axes</label>
       </div>
 
@@ -250,6 +250,45 @@ audio_el.addEventListener('pause', () => {
 
 // Add numeric readouts next to all range sliders.
 setupRangeValueLabels()
+setupCollapsibleHudSections()
+
+function setupCollapsibleHudSections(): void {
+  const sections = [...document.querySelectorAll<HTMLElement>('#hud .section')]
+
+  for (const section of sections) {
+    const h2 = section.querySelector<HTMLElement>('h2')
+    if (!h2) continue
+
+    h2.tabIndex = 0
+    h2.setAttribute('role', 'button')
+    h2.setAttribute('aria-expanded', 'true')
+
+    const setCollapsed = (collapsed: boolean): void => {
+      section.classList.toggle('collapsed', collapsed)
+      h2.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
+
+      for (const child of [...section.children]) {
+        if (child === h2) continue
+        ;(child as HTMLElement).hidden = collapsed
+      }
+    }
+
+    const toggle = (): void => {
+      const next_collapsed = !section.classList.contains('collapsed')
+      setCollapsed(next_collapsed)
+    }
+
+    h2.addEventListener('click', toggle)
+    h2.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return
+      ev.preventDefault()
+      toggle()
+    })
+
+    // Default: expanded
+    setCollapsed(false)
+  }
+}
 
 function setStatus(text: string): void {
   status_el.textContent = text
@@ -364,13 +403,38 @@ const bounce_light = new THREE.PointLight(0xffffff, 0.0, 6, 2)
 bounce_light.position.set(0, -0.6, 0.2)
 scene.add(bounce_light)
 
-const talk_light_inner = new THREE.PointLight(0x66ccff, 0.0, 6, 2)
-talk_light_inner.position.set(0, 0, 0)
-scene.add(talk_light_inner)
+// Talk spill lights (intensity driven by speech) are attached to the model after load so
+// they move/rotate with the floating monitor.
+// Use spotlights for the eye so we can aim them outward and avoid lighting the inner sphere in a way
+// that reads like "imaginary" side reflections.
+const talk_light_eye_front = new THREE.SpotLight(0x66ccff, 0.0, 1, Math.PI / 9, 0.4, 2)
+const talk_light_eye_front_target = new THREE.Object3D()
+talk_light_eye_front.target = talk_light_eye_front_target
 
-const talk_light_eye = new THREE.PointLight(0x66ccff, 0.0, 6, 2)
-talk_light_eye.position.set(0, 0.05, 0.4)
-scene.add(talk_light_eye)
+const talk_light_eye_back = new THREE.SpotLight(0x66ccff, 0.0, 1, Math.PI / 9, 0.4, 2)
+const talk_light_eye_back_target = new THREE.Object3D()
+talk_light_eye_back.target = talk_light_eye_back_target
+
+// LEDs are best represented as self-lit emissive surfaces, with a small *directional* spill.
+// Use a spotlight so we can aim it outward and avoid washing the inner eye.
+const talk_light_leds = new THREE.SpotLight(0x66ccff, 0.0, 1, Math.PI / 8, 0.35, 2)
+const talk_light_leds_target = new THREE.Object3D()
+// SpotLight requires its target to be in the scene graph.
+talk_light_leds.target = talk_light_leds_target
+
+const talk_light_booster = new THREE.PointLight(0x66ccff, 0.0, 6, 2)
+
+// Conservative defaults; real placement is computed from material bounds after model load.
+talk_light_eye_front.position.set(0, 0, 0.2)
+talk_light_eye_front_target.position.set(0, 0, 0.35)
+
+talk_light_eye_back.position.set(0, 0, -0.2)
+talk_light_eye_back_target.position.set(0, 0, -0.35)
+
+talk_light_leds.position.set(0, 0, 0)
+talk_light_leds_target.position.set(0, 0, 0.2)
+
+talk_light_booster.position.set(0, 0, 0)
 
 const highlight_group = new THREE.Group()
 scene.add(highlight_group)
@@ -397,6 +461,58 @@ let eye_shell_material: material_with_emissive | null = null
 let inner_eye_material: material_with_emissive | null = null
 let eye_core_material: material_with_emissive | null = null
 
+function ensureEyeCoreNoEnvReflections(): void {
+  if (!eye_core_material) return
+  if (!(eye_core_material instanceof THREE.MeshPhongMaterial)) return
+
+  const mat = eye_core_material
+  let changed = false
+
+  // If we previously forced emissive-only, restore a reasonable baseline so the core can still be lit
+  // by actual light sources.
+  if (!mat.map && mat.emissiveMap) {
+    mat.map = mat.emissiveMap
+    changed = true
+  }
+
+  if (mat.color.getHex() === 0x000000) {
+    mat.color.setHex(0xffffff)
+    changed = true
+  }
+
+  const baseline = phong_baseline_by_uuid.get(mat.uuid)
+  if (baseline) {
+    if (mat.shininess === 0 && baseline.shininess !== 0) {
+      mat.shininess = baseline.shininess
+      changed = true
+    }
+
+    if (mat.specular.getHex() === 0x000000 && baseline.specular_hex !== 0x000000) {
+      mat.specular.setHex(baseline.specular_hex)
+      changed = true
+    }
+  }
+
+  // Prevent the "imaginary" side reflections from IBL/env maps; keep reflections only from real lights.
+  if (mat.envMap !== null) {
+    mat.envMap = null
+    changed = true
+  }
+
+  if (mat.reflectivity !== 0) {
+    mat.reflectivity = 0
+    changed = true
+  }
+
+  // Double-sided lighting can look wrong on a sphere.
+  if (mat.side !== THREE.FrontSide) {
+    mat.side = THREE.FrontSide
+    changed = true
+  }
+
+  if (changed) mat.needsUpdate = true
+}
+
 // Some materials don't reliably bring their maps across via FBXLoader; bind them manually to match Sketchfab.
 let leds_material: material_with_emissive | null = null
 let booster_material: material_with_emissive | null = null
@@ -414,6 +530,67 @@ function computeEyeGlowColor(out: THREE.Color): THREE.Color {
 
 const material_baseline_by_uuid = new Map<string, material_baseline>()
 const material_meshes_by_uuid = new Map<string, THREE.Mesh[]>()
+
+type material_bounds_root = {
+  box_root: THREE.Box3
+  center_root: THREE.Vector3
+  size_root: THREE.Vector3
+}
+
+const tmp_bounds_corner_local = new THREE.Vector3()
+const tmp_bounds_corner_world = new THREE.Vector3()
+const tmp_bounds_corner_root = new THREE.Vector3()
+
+function computeMaterialBoundsInRoot(root: THREE.Object3D, material_uuid: string): material_bounds_root | null {
+  const meshes = material_meshes_by_uuid.get(material_uuid)
+  if (!meshes || meshes.length === 0) return null
+
+  root.updateMatrixWorld(true)
+
+  const box_root = new THREE.Box3()
+  let did_expand = false
+
+  for (const mesh of meshes) {
+    const geometry = mesh.geometry
+    geometry.computeBoundingBox()
+    const bb = geometry.boundingBox
+    if (!bb) continue
+
+    // Expand by the 8 corners of the geometry bbox, transformed to world then into root-local.
+    const min = bb.min
+    const max = bb.max
+
+    const corners: Array<[number, number, number]> = [
+      [min.x, min.y, min.z],
+      [min.x, min.y, max.z],
+      [min.x, max.y, min.z],
+      [min.x, max.y, max.z],
+      [max.x, min.y, min.z],
+      [max.x, min.y, max.z],
+      [max.x, max.y, min.z],
+      [max.x, max.y, max.z],
+    ]
+
+    for (const [x, y, z] of corners) {
+      tmp_bounds_corner_local.set(x, y, z)
+
+      tmp_bounds_corner_world.copy(tmp_bounds_corner_local).applyMatrix4(mesh.matrixWorld)
+
+      tmp_bounds_corner_root.copy(tmp_bounds_corner_world)
+      root.worldToLocal(tmp_bounds_corner_root)
+
+      box_root.expandByPoint(tmp_bounds_corner_root)
+      did_expand = true
+    }
+  }
+
+  if (!did_expand) return null
+
+  const center_root = box_root.getCenter(new THREE.Vector3())
+  const size_root = box_root.getSize(new THREE.Vector3())
+
+  return { box_root, center_root, size_root }
+}
 
 type phong_baseline = {
   shininess: number
@@ -460,11 +637,18 @@ function textureBasename(tex: THREE.Texture | null | undefined): string | null {
 }
 
 const texture_cache_by_basename = new Map<string, THREE.Texture>()
+const emissive_mask_cache_by_src_uuid = new Map<string, THREE.Texture>()
+
+type bind_texture_opts = {
+  force?: boolean
+  set_emissive_map?: boolean
+  on_applied?: (tex: THREE.Texture) => void
+}
 
 function bindColorTexture(
   mat: material_with_emissive,
   basename: string,
-  opts?: { force?: boolean; set_emissive_map?: boolean },
+  opts?: bind_texture_opts,
 ): void {
   const current_basename = textureBasename(mat.map)?.toLowerCase() ?? ''
   const desired_key = basename.toLowerCase()
@@ -478,6 +662,8 @@ function bindColorTexture(
 
     fixMaterialColorSpaces(mat)
     mat.needsUpdate = true
+
+    opts?.on_applied?.(tex)
   }
 
   if (!should_rebind) {
@@ -511,18 +697,160 @@ function bindColorTexture(
   )
 }
 
+function getTextureImageSize(image: unknown): { width: number; height: number } | null {
+  if (!image) return null
+
+  const any_img = image as { width?: number; height?: number; naturalWidth?: number; naturalHeight?: number }
+
+  const w = any_img.naturalWidth ?? any_img.width
+  const h = any_img.naturalHeight ?? any_img.height
+
+  if (typeof w === 'number' && typeof h === 'number' && w > 0 && h > 0) return { width: w, height: h }
+  return null
+}
+
+function setNonColorTextureSpace(texture: THREE.Texture): void {
+  const any_tex = texture as unknown as { colorSpace?: unknown }
+  if (!('colorSpace' in any_tex)) return
+
+  const any_three = THREE as unknown as { NoColorSpace?: unknown }
+  any_tex.colorSpace = any_three.NoColorSpace
+}
+
+function copyTextureUvTransform(dst: THREE.Texture, src: THREE.Texture): void {
+  dst.offset.copy(src.offset)
+  dst.repeat.copy(src.repeat)
+  dst.center.copy(src.center)
+  dst.rotation = src.rotation
+
+  // Newer three builds support per-texture uv channels.
+  const any_src = src as unknown as { channel?: unknown }
+  const any_dst = dst as unknown as { channel?: unknown }
+  if (typeof any_src.channel === 'number') any_dst.channel = any_src.channel
+
+  dst.flipY = src.flipY
+}
+
+function createLedEmissiveMaskFromTexture(src: THREE.Texture): THREE.Texture | null {
+  const cached = emissive_mask_cache_by_src_uuid.get(src.uuid)
+  if (cached) return cached
+
+  const image = (src as { image?: unknown }).image
+  const size = getTextureImageSize(image)
+  if (!size) return null
+
+  // Bottom LED details are small in the atlas; keep more resolution so the mask doesn't alias.
+  const mask_max_dim = 1024
+  const scale = Math.min(1, mask_max_dim / Math.max(size.width, size.height))
+  const dst_w = Math.max(1, Math.round(size.width * scale))
+  const dst_h = Math.max(1, Math.round(size.height * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = dst_w
+  canvas.height = dst_h
+
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return null
+
+  // Preserve tiny atlas details.
+  ctx.imageSmoothingEnabled = false
+
+  // Draw scaled; this keeps CPU work bounded even if the source is very large.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ctx.drawImage(image as any, 0, 0, dst_w, dst_h)
+
+  const img_data = ctx.getImageData(0, 0, dst_w, dst_h)
+  const src_data = img_data.data
+
+  const out = new Uint8Array(dst_w * dst_h * 4)
+
+  // Heuristic: treat pixels as "LED" when they are cyan/blue (high G+B relative to R) and bright enough.
+  for (let i = 0, o = 0; i < src_data.length; i += 4, o += 4) {
+    const r = src_data[i]!
+    const g = src_data[i + 1]!
+    const b = src_data[i + 2]!
+
+    const brightness = (r + g + b) / (3 * 255)
+    const gb = (g + b) * 0.5
+    const led_score = (gb - r) / 255
+
+    // Thresholds tuned to keep non-LED grey panels from glowing.
+    const t0 = 0.10
+    const t1 = 0.35
+    const s = Math.min(1, Math.max(0, (led_score - t0) / (t1 - t0)))
+
+    const b0 = 0.20
+    const b1 = 0.80
+    const bs = Math.min(1, Math.max(0, (brightness - b0) / (b1 - b0)))
+
+    const m = Math.round(255 * s * bs)
+
+    out[o] = m
+    out[o + 1] = m
+    out[o + 2] = m
+    out[o + 3] = 255
+  }
+
+  const tex = new THREE.DataTexture(out, dst_w, dst_h, THREE.RGBAFormat)
+  tex.needsUpdate = true
+
+  // This is non-color data.
+  setNonColorTextureSpace(tex)
+
+  tex.wrapS = THREE.RepeatWrapping
+  tex.wrapT = THREE.RepeatWrapping
+  tex.magFilter = THREE.LinearFilter
+  tex.minFilter = THREE.LinearMipmapLinearFilter
+  tex.generateMipmaps = true
+
+  copyTextureUvTransform(tex, src)
+
+  emissive_mask_cache_by_src_uuid.set(src.uuid, tex)
+  return tex
+}
+
+function ensureLedsEmissiveMaskBound(): void {
+  if (!leds_material) return
+  if (!leds_material.map) return
+
+  const mask = createLedEmissiveMaskFromTexture(leds_material.map)
+  if (!mask) return
+
+  leds_material.emissiveMap = mask
+
+  // Ensure UV transforms match the albedo.
+  copyTextureUvTransform(mask, leds_material.map)
+
+  leds_material.needsUpdate = true
+}
+
 function ensureSketchfabTexturesBound(force_rebind: boolean = false): void {
   // Match Sketchfab material/texture expectations where FBX exports are incomplete.
 
   // Eye
-  if (eye_shell_material) bindColorTexture(eye_shell_material, 'monitor4UV.png', { force: force_rebind })
+  // Bind emissiveMap so talk-driven emissive preserves texture detail on these surfaces.
+  if (eye_shell_material) bindColorTexture(eye_shell_material, 'monitor4UV.png', { force: force_rebind, set_emissive_map: true })
   if (inner_eye_material) bindColorTexture(inner_eye_material, 'internallight.png', { force: force_rebind, set_emissive_map: true })
 
   // Preserve texture detail on the emissive/glowing core.
-  if (eye_core_material) bindColorTexture(eye_core_material, 'SphereFinal.png', { force: force_rebind, set_emissive_map: true })
+  if (eye_core_material) {
+    bindColorTexture(eye_core_material, 'SphereFinal.png', { force: force_rebind, set_emissive_map: true })
+
+    // Keep it responsive to real lights, but prevent env/IBL reflections.
+    ensureEyeCoreNoEnvReflections()
+  }
 
   // LEDS (Sketchfab uses monitor4UV.png for this material)
-  if (leds_material) bindColorTexture(leds_material, 'monitor4UV.png', { force: force_rebind })
+  // Use an emissive mask derived from the albedo so only the blue/cyan LED pixels glow.
+  if (leds_material) {
+    bindColorTexture(leds_material, 'monitor4UV.png', {
+      force: force_rebind,
+      on_applied: () => ensureLedsEmissiveMaskBound(),
+    })
+
+    // Important: if the map already matches, bindColorTexture will no-op. We still need the emissive mask.
+    ensureLedsEmissiveMaskBound()
+  }
 
   // BoosterMaterial (Sketchfab uses SphereFinal.png for this material)
   if (booster_material) bindColorTexture(booster_material, 'SphereFinal.png', { force: force_rebind })
@@ -701,8 +1029,24 @@ function renderTalkMaterialsUi(): void {
 function selectRecommendedTalkMaterials(): void {
   talk_material_uuid_set = new Set<string>()
 
+  // Preferred defaults (per Joey): booster, eye shell, inner eye, and LEDs.
+  const preferred_names = new Set<string>([
+    'boostermaterial',
+    'eyematerial',
+    'innereyematerial',
+    'leds',
+  ])
+
   for (const mat of materials) {
-    if (isRecommendedTalkMaterial(mat)) talk_material_uuid_set.add(mat.uuid)
+    const name = (mat.name ?? '').toLowerCase()
+    if (preferred_names.has(name)) talk_material_uuid_set.add(mat.uuid)
+  }
+
+  // Fallback to heuristic selection if names don't match for some export.
+  if (talk_material_uuid_set.size === 0) {
+    for (const mat of materials) {
+      if (isRecommendedTalkMaterial(mat)) talk_material_uuid_set.add(mat.uuid)
+    }
   }
 
   if (talk_material_uuid_set.size === 0) {
@@ -771,14 +1115,20 @@ fbx_loader.load(
     booster_material = null
     material_baseline_by_uuid.clear()
     for (const mat of materials) {
-      if (isEyeShellMaterial(mat)) eye_shell_material = mat
-      if (isInnerEyeMaterial(mat)) inner_eye_material = mat
-      if (isEyeCoreMaterial(mat)) eye_core_material = mat
+      const is_eye_shell = isEyeShellMaterial(mat)
+      const is_inner_eye = isInnerEyeMaterial(mat)
+      const is_eye_core = isEyeCoreMaterial(mat)
+
+      if (is_eye_shell) eye_shell_material = mat
+      if (is_inner_eye) inner_eye_material = mat
+      if (is_eye_core) eye_core_material = mat
       if ((mat.name ?? '').toLowerCase() === 'leds') leds_material = mat
       if ((mat.name ?? '').toLowerCase() === 'boostermaterial') booster_material = mat
 
-      const emissive_intensity = typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 0
-      const emissive_hex = mat.emissive ? mat.emissive.getHex() : 0x000000
+      // Baselines are used when talk materials are unchecked.
+      // For the eye core, default baseline to "off" so unchecking everything truly disables glow.
+      const emissive_intensity = is_eye_core ? 0 : (typeof mat.emissiveIntensity === 'number' ? mat.emissiveIntensity : 0)
+      const emissive_hex = is_eye_core ? 0x000000 : (mat.emissive ? mat.emissive.getHex() : 0x000000)
       material_baseline_by_uuid.set(mat.uuid, { emissive_intensity, emissive_hex })
     }
 
@@ -802,9 +1152,91 @@ fbx_loader.load(
     monitor_root.scale.setScalar(scale)
     monitor_root.position.set(-center.x * scale, -center.y * scale, -center.z * scale)
 
-    const front_z = (box.max.z - center.z) * scale
-    talk_light_inner.position.set(0, 0, 0)
-    talk_light_eye.position.set(0, 0.05, Math.max(0.15, front_z * 0.85))
+    // Attach and position talk spill lights based on actual material bounds.
+    for (const light of [
+      talk_light_eye_front,
+      talk_light_eye_back,
+      talk_light_leds,
+      talk_light_booster,
+    ]) {
+      light.visible = true
+      light.intensity = 0
+      if (light.parent) light.parent.remove(light)
+      monitor_root.add(light)
+    }
+
+    // Ensure spot targets are parented too.
+    for (const target of [
+      talk_light_eye_front_target,
+      talk_light_eye_back_target,
+      talk_light_leds_target,
+    ]) {
+      if (target.parent) target.parent.remove(target)
+      monitor_root.add(target)
+    }
+
+    monitor_root.updateMatrixWorld(true)
+
+    // Eye front/back are derived from the eye core material bounds.
+    if (eye_core_material) {
+      const bounds = computeMaterialBoundsInRoot(monitor_root, eye_core_material.uuid)
+      if (bounds) {
+        const depth = bounds.size_root.z
+        const z_margin = Math.max(0.02, depth * 0.18)
+        const dist = Math.max(0.2, bounds.size_root.length() * 0.9)
+
+        const front_pos = new THREE.Vector3(
+          bounds.center_root.x,
+          bounds.center_root.y,
+          bounds.box_root.max.z + z_margin,
+        )
+
+        const back_pos = new THREE.Vector3(
+          bounds.center_root.x,
+          bounds.center_root.y,
+          bounds.box_root.min.z - z_margin,
+        )
+
+        const front_dir = front_pos.clone().sub(bounds.center_root).normalize()
+        const back_dir = back_pos.clone().sub(bounds.center_root).normalize()
+
+        talk_light_eye_front.position.copy(front_pos)
+        talk_light_eye_front_target.position.copy(front_pos).addScaledVector(front_dir, Math.max(0.15, dist * 0.6))
+        talk_light_eye_front.distance = dist
+
+        talk_light_eye_back.position.copy(back_pos)
+        talk_light_eye_back_target.position.copy(back_pos).addScaledVector(back_dir, Math.max(0.15, dist * 0.6))
+        talk_light_eye_back.distance = dist
+      }
+    }
+
+    if (leds_material) {
+      const bounds = computeMaterialBoundsInRoot(monitor_root, leds_material.uuid)
+      if (bounds) {
+        // Aim LED spill outward so it doesn't light the inner eye.
+        const outward = bounds.center_root.clone().normalize()
+        const outward_ok = Number.isFinite(outward.x) && Number.isFinite(outward.y) && Number.isFinite(outward.z)
+
+        const offset = Math.max(0.03, bounds.size_root.length() * 0.12)
+        const target_offset = offset + Math.max(0.06, bounds.size_root.length() * 0.35)
+
+        if (outward_ok && outward.lengthSq() > 0.000001) {
+          talk_light_leds.position.copy(bounds.center_root).addScaledVector(outward, offset)
+          talk_light_leds_target.position.copy(bounds.center_root).addScaledVector(outward, target_offset)
+        } else {
+          talk_light_leds.position.copy(bounds.center_root)
+          talk_light_leds_target.position.copy(bounds.center_root)
+          talk_light_leds_target.position.z += Math.max(0.15, bounds.size_root.length() * 0.35)
+        }
+
+        talk_light_leds.distance = Math.max(0.15, bounds.size_root.length() * 0.9)
+      }
+    }
+
+    if (booster_material) {
+      const bounds = computeMaterialBoundsInRoot(monitor_root, booster_material.uuid)
+      if (bounds) talk_light_booster.position.copy(bounds.center_root)
+    }
 
     // Place bounce light under the model.
     bounce_light.position.set(0, -Math.max(0.35, (box.max.y - center.y) * scale * 0.9), 0.1)
@@ -1079,9 +1511,14 @@ function animate(): void {
   const idle_glow = parseNumberInput(idle_glow_input)
   const talk_scale = parseNumberInput(talk_scale_input)
 
+  const eye_glow_color = computeEyeGlowColor(eye_color_tmp)
+
+  // Eye core should not pick up env/IBL reflections (but should still react to actual lights).
+  ensureEyeCoreNoEnvReflections()
+
   // Eye (core): solid Halo-blue emissive color; preserve texture detail via emissiveMap.
+  // IMPORTANT: Only glow when selected as a talk material. When nothing is selected, the eye core should not glow.
   if (eye_core_material) {
-    const eye_glow_color = computeEyeGlowColor(eye_color_tmp)
 
     // Ensure emissiveMap stays bound (in case it was swapped).
     if (eye_core_material.map && eye_core_material.emissiveMap !== eye_core_material.map) {
@@ -1090,24 +1527,48 @@ function animate(): void {
       eye_core_material.needsUpdate = true
     }
 
-    eye_core_material.emissive = eye_core_material.emissive ?? new THREE.Color(eye_glow_color)
-    eye_core_material.emissive.copy(eye_glow_color)
-
-    const talk_scale = parseNumberInput(talk_scale_input)
-    const eye_idle_intensity = 0.8
-    const eye_talk_intensity = talk_strength * (1.2 + talk_scale * 0.25)
-
-    // Always keep the eye core self-lit; if it is also selected as a talk material, the per-material
-    // talk targets will further adjust intensity (but color remains fixed).
     const core_selected = talk_material_uuid_set.has(eye_core_material.uuid)
-    if (!core_selected) eye_core_material.emissiveIntensity = Math.min(15, eye_idle_intensity + eye_talk_intensity)
 
-    eye_core_material.needsUpdate = true
-    talk_light_eye.color.copy(eye_glow_color)
+    if (core_selected) {
+      eye_core_material.emissive = eye_core_material.emissive ?? new THREE.Color(eye_glow_color)
+      eye_core_material.emissive.copy(eye_glow_color)
+
+      // Let the normal talk target pipeline control emissiveIntensity when selected.
+      // We only enforce color + map bindings here.
+      eye_core_material.needsUpdate = true
+    } else {
+      // Restore "off" baseline.
+      const baseline = material_baseline_by_uuid.get(eye_core_material.uuid)
+      eye_core_material.emissive = eye_core_material.emissive ?? new THREE.Color(0x000000)
+      eye_core_material.emissive.setHex(baseline?.emissive_hex ?? 0x000000)
+      eye_core_material.emissiveIntensity = baseline?.emissive_intensity ?? 0
+      eye_core_material.needsUpdate = true
+    }
+
+    talk_light_eye_front.color.copy(eye_glow_color)
+    talk_light_eye_back.color.copy(eye_glow_color)
   }
 
+  // Keep eye spill light color consistent even if only shell/inner-eye are selected.
+  talk_light_eye_front.color.copy(eye_glow_color)
+  talk_light_eye_back.color.copy(eye_glow_color)
+
   for (const target of talk_targets) {
-    if (!target.material.emissive) target.material.emissive = new THREE.Color(0x66ccff)
+    // Force emissive colors for key materials where FBX often sets emissive but leaves it black.
+    const is_leds = Boolean(leds_material && target.material.uuid === leds_material.uuid)
+    const is_eye_shell = Boolean(eye_shell_material && target.material.uuid === eye_shell_material.uuid)
+    const is_inner_eye = Boolean(inner_eye_material && target.material.uuid === inner_eye_material.uuid)
+    const is_eye_core = Boolean(eye_core_material && target.material.uuid === eye_core_material.uuid)
+
+    if (is_leds) {
+      target.material.emissive = target.material.emissive ?? new THREE.Color(0x66ccff)
+      target.material.emissive.setHex(0x66ccff)
+    } else if (is_eye_shell || is_inner_eye || is_eye_core) {
+      target.material.emissive = target.material.emissive ?? new THREE.Color(eye_glow_color)
+      target.material.emissive.copy(eye_glow_color)
+    } else if (!target.material.emissive) {
+      target.material.emissive = new THREE.Color(0x66ccff)
+    }
 
     const intensity = idle_glow + talk_strength * talk_scale * target.talk_weight
     target.material.emissiveIntensity = intensity
@@ -1119,28 +1580,57 @@ function animate(): void {
   // Apply look controls to all other phong materials too (so highlight washout can be tuned globally).
   for (const mat of materials) {
     if (!(mat instanceof THREE.MeshPhongMaterial)) continue
+
     // materials already have baseline captured during traversal
     applyPhongLookControls(mat)
   }
 
-  // Make checkbox changes obvious: point light spill only follows selected talk groups.
-  const core_target_selected = eye_core_material ? talk_material_uuid_set.has(eye_core_material.uuid) : false
-  const inner_target_selected = talk_targets.some((tgt) => !eye_core_material || tgt.material.uuid !== eye_core_material.uuid)
+  // Re-assert eye core env/IBL off after global phong controls (which may set envMap).
+  ensureEyeCoreNoEnvReflections()
 
+  // Talk spill lights (point lights) originate from selected emissive features.
   const point_lights_enabled = use_point_light_input.checked
 
-  const talk_inner_enabled = point_lights_enabled && enable_talk_light_inner_input.checked
-  talk_light_inner.visible = talk_inner_enabled
-  talk_light_inner.intensity = talk_inner_enabled && inner_target_selected ? Math.max(0, talk_strength * 3.0) : 0
-
   const talk_eye_enabled = point_lights_enabled && enable_talk_light_eye_input.checked
-  talk_light_eye.visible = talk_eye_enabled
-  talk_light_eye.intensity = talk_eye_enabled && core_target_selected ? Math.max(0, talk_strength * 3.8) : 0
+  const talk_other_enabled = point_lights_enabled && enable_talk_light_inner_input.checked
+
+  const eye_selected =
+    (eye_core_material && talk_material_uuid_set.has(eye_core_material.uuid)) ||
+    (eye_shell_material && talk_material_uuid_set.has(eye_shell_material.uuid)) ||
+    (inner_eye_material && talk_material_uuid_set.has(inner_eye_material.uuid))
+
+  const leds_selected = leds_material ? talk_material_uuid_set.has(leds_material.uuid) : false
+  const booster_selected = booster_material ? talk_material_uuid_set.has(booster_material.uuid) : false
+
+  const eye_spill_total = talk_eye_enabled && eye_selected ? Math.max(0, talk_strength * 3.8) : 0
+  talk_light_eye_front.visible = talk_eye_enabled
+  talk_light_eye_back.visible = talk_eye_enabled
+
+  // Bias a bit forward so it reads as coming from the eye's "front".
+  talk_light_eye_front.intensity = eye_spill_total * 0.6
+  talk_light_eye_back.intensity = eye_spill_total * 0.4
+
+  const other_spill_total = talk_other_enabled ? Math.max(0, talk_strength * 3.0) : 0
+  talk_light_leds.visible = talk_other_enabled
+  talk_light_booster.visible = talk_other_enabled
+
+  const w_leds = leds_selected ? 1.0 : 0
+  const w_booster = booster_selected ? 0.9 : 0
+  const w_sum = w_leds + w_booster
+
+  if (w_sum <= 0) {
+    talk_light_leds.intensity = 0
+    talk_light_booster.intensity = 0
+  } else {
+    // Slightly bias the "other" spill toward the booster (LEDs should read primarily via emissiveMap).
+    talk_light_leds.intensity = other_spill_total * (w_leds / w_sum) * 0.12
+    talk_light_booster.intensity = other_spill_total * (w_booster / w_sum)
+  }
 
   for (const helper of highlight_helpers) helper.update()
 
   setLightsStatus(
-    `lights: hemi=${hemi_light.intensity.toFixed(2)} dir=${dir_light.intensity.toFixed(2)} amb=${ambient_light.intensity.toFixed(2)} bounce=${bounce_light.intensity.toFixed(2)} talk_inner=${talk_light_inner.intensity.toFixed(2)} talk_eye=${talk_light_eye.intensity.toFixed(2)}`,
+    `lights: hemi=${hemi_light.intensity.toFixed(2)} dir=${dir_light.intensity.toFixed(2)} amb=${ambient_light.intensity.toFixed(2)} bounce=${bounce_light.intensity.toFixed(2)} eye_f=${talk_light_eye_front.intensity.toFixed(2)} eye_b=${talk_light_eye_back.intensity.toFixed(2)} leds=${talk_light_leds.intensity.toFixed(2)} boost=${talk_light_booster.intensity.toFixed(2)}`,
   )
 
   setRenderStatus(

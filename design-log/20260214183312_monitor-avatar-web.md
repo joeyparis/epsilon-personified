@@ -103,3 +103,38 @@ Agent can still click a “Start” button if autoplay is blocked.
   - Simple image-based lighting approximation (PMREM from RoomEnvironment) to add more natural fill/reflection control.
 - Added Ambient light (toggle + intensity) to help lift shadows after lowering exposure.
 - Added numeric value readouts next to all sliders to make it easy to record preferred settings and update defaults.
+
+## Update 2026-02-14
+### Problem
+The “talk spill” point lights currently feel like they are coming from the wrong place, especially as the monitor floats/rotates.
+
+Root cause: the talk spill lights are world-anchored rather than being tied to the emissive parts of the model.
+
+### Design delta
+- Replace the current generic talk spill lights with talk spill sources that originate from the monitor’s emissive features:
+  - front of the eye
+  - back of the eye
+  - LEDs
+  - booster
+- Attach the talk spill lights to the model root so they move/rotate with the monitor.
+- Derive each light’s position from the actual meshes using `material_meshes_by_uuid` (bounding box center/extents in model-root space).
+- Preserve the existing talk animation curve and overall intensity tuning; only redistribute where the spill appears to originate.
+
+### Implementation approach
+- Identify meshes for the relevant materials (InnerSphereMaterial / LEDS / BoosterMaterial, plus eye shell if needed).
+- Compute a stable local-space AABB per material by transforming each mesh’s geometry bounds into the model-root coordinate space.
+- Place point lights:
+  - Eye front/back: use the eye core AABB and place two lights at the center, offset to the minZ/maxZ extents.
+  - LEDs: use LEDS AABB center.
+  - Booster: use BoosterMaterial AABB center.
+- Gate light intensity based on whether the corresponding materials are selected for talk glow (so the UI selection still controls “what talks”).
+
+### Implementation Results
+- Replaced the world-anchored talk spill lights with 4 model-attached point lights (eye front/back, LEDs, booster) in `monitor-avatar/src/main.ts`.
+- Positioned these lights using per-material bounds computed from the actual meshes (`material_meshes_by_uuid`) so the spill originates from the emissive features.
+- Preserved the existing talk animation curve and redistributed the previous spill intensity across the new sources, gated by the selected talk materials.
+- Tightened the LED spill light (positioned slightly outward and with a shorter range) and derived an LED emissive mask from the albedo texture so only the blue/cyan LED pixels glow (instead of the whole LED material).
+- Ensured EyeMaterial / InnerEyeMaterial use emissive color + emissiveMap when selected so the eye glow affects the visible eye surfaces (not just the inner orb).
+- Disabled env/IBL reflections for InnerSphereMaterial (eye core) while keeping it responsive to actual lights, to avoid “imaginary” side reflections.
+- Switched the eye talk spill lights to directional spotlights aimed outward (front/back) so enabling eye glow doesn’t wash the inner sphere and create side highlights.
+- Updated the recommended talk materials default to booster + eye shell + inner eye + LEDs.
