@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sketchfab settings dump</title>
+    <script src="https://static.sketchfab.com/api/sketchfab-viewer-1.12.1.js"></script>
+    <style>
+      html, body { margin: 0; height: 100%; }
+      #api-frame { width: 100%; height: 100%; border: 0; }
+    </style>
+  </head>
+  <body>
+    <textarea id="dump_out" readonly spellcheck="false" style="position: fixed; left: 12px; right: 12px; bottom: 12px; height: 38vh; padding: 10px; z-index: 10; background: #0f111a; color: #e6e6e6; border: 1px solid rgba(255,255,255,0.2); border-radius: 8px; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;"></textarea>
+    <iframe id="api-frame" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen></iframe>
+    <script>
+      const uid = 'eaa2c19f5e8740449dfcdb0a9a2e103b'
+      const iframe = document.getElementById('api-frame')
+      const dump_out = document.getElementById('dump_out')
+      const client = new Sketchfab(iframe)
+
+      function setOutput(text) {
+        dump_out.value = text
+      }
+
+      function serializeError(err) {
+        if (!err) return null
+        if (err instanceof Error) return { name: err.name, message: err.message, stack: err.stack }
+        return { message: String(err) }
+      }
+
+      async function safeCall(call_name, call_fn) {
+        try {
+          const value = await call_fn()
+          return { ok: true, call_name, value }
+        } catch (err) {
+          return { ok: false, call_name, error: serializeError(err) }
+        }
+      }
+
+      function getApiMethodNames(api) {
+        try {
+          return Object.keys(api).filter((k) => typeof api[k] === 'function').sort()
+        } catch {
+          return []
+        }
+      }
+
+      function getPostProcessing(api) {
+        return new Promise((resolve, reject) => {
+          if (typeof api.getPostProcessing !== 'function') return reject(new Error('api.getPostProcessing is not a function'))
+          api.getPostProcessing((post_processing) => resolve(post_processing))
+        })
+      }
+
+      function getEnvironment(api) {
+        return new Promise((resolve, reject) => {
+          if (typeof api.getEnvironment !== 'function') return reject(new Error('api.getEnvironment is not a function'))
+          api.getEnvironment((err, env) => resolve({ err, env }))
+        })
+      }
+
+      function getLight(api, index) {
+        return new Promise((resolve, reject) => {
+          if (typeof api.getLight !== 'function') return reject(new Error('api.getLight is not a function'))
+          api.getLight(index, (err, light) => resolve({ index, err, light }))
+        })
+      }
+
+      function getMaterialList(api) {
+        return new Promise((resolve, reject) => {
+          if (typeof api.getMaterialList !== 'function') return reject(new Error('api.getMaterialList is not a function'))
+          api.getMaterialList((err, mats) => resolve({ err, mats }))
+        })
+      }
+
+      function getMaterial(api, material_stub) {
+        return new Promise((resolve, reject) => {
+          if (typeof api.getMaterial !== 'function') return reject(new Error('api.getMaterial is not a function'))
+          api.getMaterial(material_stub, (err, mat) => resolve({ err, mat }))
+        })
+      }
+
+      function getTextureList(api) {
+        return new Promise((resolve, reject) => {
+          if (typeof api.getTextureList !== 'function') return reject(new Error('api.getTextureList is not a function'))
+          api.getTextureList((err, textures) => resolve({ err, textures }))
+        })
+      }
+
+      client.init(uid, {
+        autostart: 1,
+        ui_infos: 0,
+        ui_watermark: 0,
+        success: function (api) {
+          api.start()
+
+          api.addEventListener('viewerready', async function () {
+            setOutput('viewerready; fetching settings…')
+
+            const api_method_names = getApiMethodNames(api)
+
+            const post_processing = await safeCall('getPostProcessing', () => getPostProcessing(api))
+            const environment = await safeCall('getEnvironment', () => getEnvironment(api))
+
+            const lights = []
+            for (const light_index of [0, 1, 2]) {
+              lights.push(await safeCall(`getLight:${light_index}`, () => getLight(api, light_index)))
+            }
+
+            const material_list_result = await safeCall('getMaterialList', () => getMaterialList(api))
+
+            const mats =
+              material_list_result.ok && material_list_result.value && material_list_result.value.mats
+                ? material_list_result.value.mats
+                : []
+
+            const eye_stub = mats.find((m) => (m.name || '').toLowerCase() === 'eyematerial') || null
+
+            const eye_material_full = eye_stub
+              ? await safeCall('getMaterial:EyeMaterial', () => getMaterial(api, eye_stub))
+              : { ok: false, call_name: 'getMaterial:EyeMaterial', error: { message: 'EyeMaterial not found in getMaterialList()' } }
+
+            const texture_list = await safeCall('getTextureList', () => getTextureList(api))
+
+            const dump_obj = {
+              uid,
+              api_method_names,
+              post_processing,
+              environment,
+              lights,
+              material_list: material_list_result,
+              eye_material_stub: eye_stub,
+              eye_material_full,
+              texture_list,
+            }
+
+            const dump_json = JSON.stringify(dump_obj, null, 2)
+            console.log(dump_json)
+            setOutput(dump_json)
+          })
+        },
+        error: function () {
+          console.error('Sketchfab init failed')
+          setOutput('Sketchfab init failed')
+        }
+      })
+    </script>
+  </body>
+</html>

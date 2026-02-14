@@ -1,0 +1,177 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.4;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 800px at 50% 35%, #0b2a3a 0%, #05070c 55%, #02030a 100%);
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#scene_canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 380px;
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+}
+
+.section {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.section h2 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 650;
+  opacity: 0.95;
+}
+
+#hud h1 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+#hud .sub {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+#talk_materials_list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.18);
+  max-height: 160px;
+  overflow: auto;
+}
+
+#talk_materials_list label {
+  margin: 0;
+}
+
+.talk_material_row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+}
+
+.talk_material_row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.row.stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+label.slider_label {
+  display: grid;
+  grid-template-columns: 1fr 180px 56px;
+  align-items: center;
+  gap: 10px;
+}
+
+.slider_name {
+  opacity: 0.92;
+}
+
+.slider_value {
+  text-align: right;
+  opacity: 0.82;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+label.slider_label input[type="range"] {
+  width: 180px;
+}
+
+input[type="range"] {
+  width: 180px;
+}
+
+select,
+input[type="file"],
+button {
+  font: inherit;
+}
+
+select,
+button,
+input[type="file"] {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.25);
+  color: rgba(255, 255, 255, 0.92);
+  padding: 8px 10px;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+a#download_link {
+  color: #b5e6ff;
+  text-decoration: none;
+  font-size: 12px;
+}
+
+small.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}

@@ -1,0 +1,4 @@
+.DS_Store
+monitor-avatar/node_modules/
+monitor-avatar/dist/
+monitor-avatar/public/audio/default.aac
