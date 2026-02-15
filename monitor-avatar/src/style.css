@@ -72,6 +72,16 @@ body {
   content: '▸';
 }
 
+/* Collapse: hide all direct children except the header. */
+#hud .section.collapsed > :not(h2) {
+  display: none !important;
+}
+
+/* Ensure the HTML hidden attribute always collapses content (overrides .row { display: flex; }). */
+#hud [hidden] {
+  display: none !important;
+}
+
 #hud h1 {
   margin: 0 0 8px 0;
   font-size: 18px;

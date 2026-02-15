@@ -138,3 +138,158 @@ Root cause: the talk spill lights are world-anchored rather than being tied to t
 - Disabled env/IBL reflections for InnerSphereMaterial (eye core) while keeping it responsive to actual lights, to avoid “imaginary” side reflections.
 - Switched the eye talk spill lights to directional spotlights aimed outward (front/back) so enabling eye glow doesn’t wash the inner sphere and create side highlights.
 - Updated the recommended talk materials default to booster + eye shell + inner eye + LEDs.
+
+## Update 2026-02-14
+### Problem
+The HUD sections should be collapsed by default and remember their state for return visits. We also want manual controls to:
+- Preview “talk” without playing audio (drive talk glow + talk spill lights).
+- Force-run a specific talk personality motion style (excited hover / spin bursts / orbit swoop) on demand.
+- Remove the “mouthy/jerky” talk-coupled motion (decouple motion amplitude from syllable-level `talk_strength` changes).
+
+### Design delta
+- Collapsible HUD
+  - Default all sections to collapsed on first visit.
+  - Persist per-section collapsed/expanded state using `localStorage`.
+  - Use stable section IDs (avoid coupling storage keys to visible header text).
+- Manual talk preview
+  - Add “Preview talk” and “Stop preview” buttons.
+  - Preview uses a synthetic `talk_strength` envelope but flows through the same pipeline as audio-driven talk (emissive targets + talk spill lights + talk-session motion detection).
+- Manual motion triggers
+  - Add “Run hover”, “Run spin”, “Run orbit” buttons.
+  - Each button starts a bounded preview window that forces the corresponding `talk_motion_style` while active.
+
+### Implementation approach
+- HUD
+  - Add `data-section-id` attributes to each `.section` in the `#hud` template.
+  - Update `setupCollapsibleHudSections()` to:
+    - restore collapsed state from `localStorage` on init (default collapsed when missing)
+    - persist state on toggle
+- Manual animation control
+  - Introduce a small manual-preview state machine (active window + optional forced motion style).
+  - In the render loop, compute `talk_strength` by preferring the manual preview source while active; otherwise, use the audio analyser.
+  - Ensure manual preview works even when audio is paused.
+
+### Implementation Plan
+See Warp plan doc: “Monitor avatar: persist HUD collapse state + manual talk/motion controls”.
+
+### Examples
+✅ User collapses “Lights”, refreshes page, and “Lights” remains collapsed.
+✅ Clicking “Preview talk” causes eye/LED/booster glow + spill to animate without audio.
+✅ Clicking “Run spin” triggers the “spin bursts” motion style for a short window.
+❌ Manual preview should not permanently override audio-driven behavior once it ends.
+
+### Trade-offs
+- `localStorage` is per-browser and per-origin; this is sufficient for a local viewer and simple persistence.
+- Manual preview adds extra state to the animation loop; keep it small, explicit, and bounded to avoid confusing interactions with audio-driven talk.
+
+## Update 2026-02-14
+### Problem
+Home-pose calibration is currently confusing because the avatar’s rotation is still derived from `lookAt(camera.position)` (camera-tied facing). This makes it hard to reason about “what is 0,0,0” when trying to align the model’s axes to world axes.
+
+We want a deterministic debug baseline:
+- World origin is `(0,0,0)`.
+- Model starts at `(0,0,0)`.
+- Camera is fixed, head-on, looking at `(0,0,0)`.
+- Sliders move only the model (not the camera, and the model should not track the camera).
+
+### Design delta
+- Remove camera-tied facing entirely (no per-frame `lookAt(camera.position)` for the model).
+- “Debug home pose (freeze)” becomes a strict baseline mode:
+  - Freeze idle/wander/talk motion.
+  - Force a fixed camera pose looking at world origin; disable OrbitControls while active.
+  - Apply only user controls to the model root:
+    - position from `model_pos_(x|y|z)`
+    - rotation from `look_rot_(x|y|z)_deg`
+- While “Debug home pose” is enabled, keep world axes as true world axes (do not reparent/align them to the model).
+
+### Implementation approach
+- Consolidate camera-lock state under a single `home_camera_lock_active` and a single `home_camera_distance`.
+- Remove references to undeclared/obsolete helpers (`tmp_lookat_dummy`, `monitor_face_correction_quat`) and fix duplicated temp declarations.
+- Update render-loop composition so the model root rotation in normal mode is: `base_quaternion * look_rot_offset * (idle/wander/talk offsets)`.
+
+### Examples
+✅ With “Debug home pose (freeze)” enabled, rotating the camera (or moving it) does not cause the model to rotate.
+✅ With “Debug home pose” enabled, camera remains fixed and the model starts at `pos=(0,0,0)`, `rot=(0,0,0)` unless the sliders are changed.
+❌ The debug baseline should not depend on camera position/orbit controls.
+
+## Update 2026-02-14
+### Problem
+We want the avatar to have a more “companion” idle: it can wander around (Lakitu-cloud-like), but its “home” pose should always return to facing the camera. When it is needed (for now: only when talking), it should animate back to the home pose and look at the camera.
+
+### Design delta
+- Add an idle wander controller with:
+  - a smoothly-changing wander offset (random goal points, damped motion)
+  - subtle secondary motion (optional bob/tilt) that does not read as “mouth movement”
+- Add a “needed/attention” blend driven by talk state:
+  - detect `is_talking` based on the audio element playing/paused state (not voice amplitude)
+  - compute `attention_amount` as a damped value 0..1
+  - keep positional drift while talking (avoid rigidity), but suppress rotational wander so it stays facing the camera
+- Define “home rotation” as always-facing-camera (with a one-time correction quaternion so the model’s forward axis is respected), plus a small pitch-down bias (~5°).
+
+### Implementation approach
+- Compute a `monitor_face_correction_quat` at load time so:
+  - `face_camera_quat = lookAt(camera) * correction`
+  - At the initial camera pose, this reproduces the current model orientation.
+- Each frame:
+  - compute `talk_strength` (audio or manual preview)
+  - update `is_talking` + `attention_amount`
+  - update wander goal + wander offset
+  - set position = base_position + (wander_offset + small idle drift) * (1 - attention_amount) + (manual motion offsets)
+  - set rotation = face_camera_quat * (wander/idle rotation offsets scaled by (1 - attention_amount)) * (manual motion rotation offsets)
+
+### Examples
+✅ While silent: orb drifts and feels alive.
+✅ When talking starts: orb returns home and faces the camera smoothly.
+✅ No syllable-level jitter in the motion (talk strength still drives glow/spill).
+
+### Trade-offs
+- Facing the camera every frame means the “home” pose is view-dependent; this matches the companion/Lakitu vibe.
+- Keeping the wander subtle is important so the talk glow remains the primary “mouth” signal.
+
+## Update 2026-02-15
+### Problem
+We have now decoupled the model from camera-facing behavior, so “home look” needs a calibrated, fixed default look rotation offset.
+
+When talking, the avatar doesn’t need to look directly at the camera — it just needs to stay generally near its home orientation.
+
+### Design delta
+- Set default look rotation offset to:
+  - Y = 270
+  - Z = 14
+- When talking, keep a small amount of rotational drift (do not fully suppress idle/wander rotation).
+
+### Implementation Results
+- Updated the default slider values and reset behavior for look rotation offsets.
+- Adjusted the talk-time rotation scaling so talking stays near-home without becoming perfectly rigid.
+
+## Update 2026-02-15
+### Problem
+Now that we’ve established a stable notion of “face forward”, we want the avatar to look at the camera when it starts talking (wherever the camera currently is).
+
+### Design delta
+- Re-introduce camera-facing only while talking.
+- Smoothly blend into camera-facing at talk start using the existing `attention_amount`.
+- Preserve the strict “Debug home pose (freeze)” baseline (no camera tie in that mode).
+
+### Implementation Results
+- Compute a face-axis correction quaternion from the eye core center so we can use Three.js `lookAt` (which aims `-Z`) while treating the eye direction as the true forward.
+- While talking, slerp from the normal home pose quaternion to the camera-facing quaternion using `attention_amount`.
+
+## Update 2026-02-15
+### Problem
+Camera-facing on talk start is currently a bit too snappy. We also want the avatar to move closer to the camera while talking.
+
+### Design delta
+- Slow down the talk-time `attention_amount` rise (controls how fast the model blends to camera-facing).
+- While talking, move toward a point in front of the camera.
+
+### Implementation Results
+- Reduced the talk-time damping lambda and kept a separate idle return lambda.
+- Implemented a talk-time “approach” controller that advances the model forward along its current facing direction (rather than teleporting/lerping directly toward the camera). This makes the movement feel more like it is flying toward the camera while it turns.
+- Removed the post-talk return-to-origin behavior so the avatar continues idling from its new position after speaking.
+- Added a farther stand-off distance (don’t get too close to the camera).
+- Smoothed the approach stop by easing out as it nears its target and allowing a brief coast after talking ends.
+- Made approach speed distance-based so the approach takes ~3 seconds regardless of distance, with slight per-talk jitter.
+- Added steering toward the approach target so it doesn’t end up offset to the left/right of the camera.
+- Added a simple grid-floor helper (toggle) to provide a stable “ground” and rotation reference.
+- Persist the last camera-facing rotation offset after talking ends so the avatar doesn’t snap back to its pre-talk "home" direction.

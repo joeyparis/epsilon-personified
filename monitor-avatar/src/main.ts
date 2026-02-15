@@ -27,6 +27,11 @@ type material_baseline = {
 const model_url = '/assets/halo-reach-forge-monitor/source/NewMonitor11.fbx'
 const textures_base_url = '/assets/halo-reach-forge-monitor/textures/'
 
+// Default home look calibration (degrees 0..360).
+const default_look_rot_x_deg = 0
+const default_look_rot_y_deg = 270
+const default_look_rot_z_deg = 14
+
 const app_el = document.querySelector<HTMLDivElement>('#app')
 if (!app_el) throw new Error('Missing #app element')
 
@@ -36,7 +41,7 @@ app_el.innerHTML = `
     <h1>Monitor Avatar</h1>
     <p class="sub">Audio-driven glow “mouth” + in-browser recording (.webm)</p>
 
-    <div class="section">
+    <div class="section" data-section-id="audio">
       <h2>Audio</h2>
       <div class="row stack">
         <label>
@@ -58,7 +63,7 @@ app_el.innerHTML = `
       </div>
     </div>
 
-    <div class="section">
+    <div class="section" data-section-id="talk_glow">
       <h2>Talk glow</h2>
       <div class="row stack">
         <div class="row" style="justify-content: space-between">
@@ -66,6 +71,19 @@ app_el.innerHTML = `
           <button id="select_recommended_button" type="button" disabled>Select recommended</button>
         </div>
         <div id="talk_materials_list"></div>
+      </div>
+
+      <div class="row stack">
+        <span style="font-size: 12px; opacity: 0.9">Manual preview</span>
+        <div class="row" style="flex-wrap: wrap">
+          <button id="preview_talk_button" type="button" disabled>Preview talk</button>
+          <button id="stop_preview_button" type="button" disabled>Stop preview</button>
+        </div>
+        <div class="row" style="flex-wrap: wrap">
+          <button id="run_hover_button" type="button" disabled>Run hover</button>
+          <button id="run_spin_button" type="button" disabled>Run spin</button>
+          <button id="run_orbit_button" type="button" disabled>Run orbit</button>
+        </div>
       </div>
 
       <div class="row stack">
@@ -80,31 +98,7 @@ app_el.innerHTML = `
       </div>
     </div>
 
-    <div class="section">
-      <h2>Lights</h2>
-      <div id="lights_list" class="row stack">
-        <label><input id="enable_hemi_light" type="checkbox" checked /> Fill (hemisphere)</label>
-        <label><input id="enable_dir_light" type="checkbox" checked /> Overhead (directional)</label>
-        <label><input id="enable_ambient_light" type="checkbox" checked /> Ambient</label>
-        <label><input id="enable_bounce_light" type="checkbox" checked /> Bounce (below)</label>
-        <label><input id="enable_talk_light_inner" type="checkbox" checked /> Talk spill (LEDs + booster)</label>
-        <label><input id="enable_talk_light_eye" type="checkbox" checked /> Talk spill (eye front/back)</label>
-        <label><input id="enable_axes_helper" type="checkbox" checked /> Debug axes</label>
-      </div>
-
-      <div class="row stack">
-        <label>Overhead intensity <input id="dir_light_intensity" type="range" min="0" max="1.5" step="0.01" value="0.6" /></label>
-        <label>Fill intensity <input id="hemi_light_intensity" type="range" min="0" max="2" step="0.01" value="2.0" /></label>
-        <label>Ambient intensity <input id="ambient_light_intensity" type="range" min="0" max="2" step="0.01" value="2.0" /></label>
-        <label>Bounce intensity <input id="bounce_light_intensity" type="range" min="0" max="12" step="0.05" value="12.0" /></label>
-        <label>
-          <input id="use_point_light" type="checkbox" checked />
-          Enable talk spill lights
-        </label>
-      </div>
-    </div>
-
-    <div class="section">
+    <div class="section" data-section-id="rendering">
       <h2>Rendering</h2>
       <div class="row stack">
         <label>
@@ -121,18 +115,64 @@ app_el.innerHTML = `
         <label>Env reflectivity <input id="env_reflectivity" type="range" min="0" max="1" step="0.01" value="0.08" /></label>
 
         <div class="row" style="justify-content: space-between">
-          <span style="font-size: 12px; opacity: 0.9">Eye textures</span>
-          <button id="rebind_eye_texture_button" type="button" disabled>Rebind eye textures</button>
+          <span style="font-size: 12px; opacity: 0.9">Look rotation offset (degrees)</span>
+          <button id="reset_look_rot_button" type="button">Reset</button>
         </div>
+
+        <label>Look rot X <input id="look_rot_x_deg" type="range" min="0" max="360" step="1" value="${default_look_rot_x_deg}" /></label>
+        <label>Look rot Y <input id="look_rot_y_deg" type="range" min="0" max="360" step="1" value="${default_look_rot_y_deg}" /></label>
+        <label>Look rot Z <input id="look_rot_z_deg" type="range" min="0" max="360" step="1" value="${default_look_rot_z_deg}" /></label>
+
+        <div class="row" style="justify-content: space-between">
+          <span style="font-size: 12px; opacity: 0.9">Model position offset</span>
+          <button id="reset_model_pose_button" type="button">Reset</button>
+        </div>
+        <label>Pos X <input id="model_pos_x" type="range" min="-1" max="1" step="0.01" value="0" /></label>
+        <label>Pos Y <input id="model_pos_y" type="range" min="-1" max="1" step="0.01" value="0" /></label>
+        <label>Pos Z <input id="model_pos_z" type="range" min="-1" max="1" step="0.01" value="0" /></label>
+
+        <label>
+          <input id="debug_home_pose" type="checkbox" />
+          Debug home pose (freeze)
+        </label>
       </div>
     </div>
 
-    <div class="section">
+    <div class="section" data-section-id="lights">
+      <h2>Lights</h2>
+      <div id="lights_list" class="row stack">
+        <label><input id="enable_hemi_light" type="checkbox" checked /> Fill (hemisphere)</label>
+        <label><input id="enable_dir_light" type="checkbox" checked /> Overhead (directional)</label>
+        <label><input id="enable_ambient_light" type="checkbox" checked /> Ambient</label>
+        <label><input id="enable_bounce_light" type="checkbox" checked /> Bounce (below)</label>
+        <label><input id="enable_talk_light_inner" type="checkbox" checked /> Talk spill (LEDs + booster)</label>
+        <label><input id="enable_talk_light_eye" type="checkbox" checked /> Talk spill (eye front/back)</label>
+        <label><input id="enable_axes_helper" type="checkbox" checked /> Debug axes (world)</label>
+        <label><input id="enable_grid_floor" type="checkbox" checked /> Grid floor</label>
+        <label><input id="align_world_axes_to_model" type="checkbox" /> Align world axes to model</label>
+        <label><input id="enable_model_axes_helper" type="checkbox" /> Debug axes (model)</label>
+        <label><input id="enable_model_forward_helper" type="checkbox" /> Debug forward (face)</label>
+      </div>
+
+      <div class="row stack">
+        <label>Overhead intensity <input id="dir_light_intensity" type="range" min="0" max="1.5" step="0.01" value="0.6" /></label>
+        <label>Fill intensity <input id="hemi_light_intensity" type="range" min="0" max="2" step="0.01" value="2.0" /></label>
+        <label>Ambient intensity <input id="ambient_light_intensity" type="range" min="0" max="2" step="0.01" value="2.0" /></label>
+        <label>Bounce intensity <input id="bounce_light_intensity" type="range" min="0" max="12" step="0.05" value="12.0" /></label>
+        <label>
+          <input id="use_point_light" type="checkbox" checked />
+          Enable talk spill lights
+        </label>
+      </div>
+    </div>
+
+    <div class="section" data-section-id="status">
       <h2>Status</h2>
       <div class="row stack">
         <small class="mono" id="status_el">Loading model…</small>
         <small class="mono" id="lights_status_el"></small>
         <small class="mono" id="render_status_el"></small>
+        <small class="mono" id="look_status_el"></small>
       </div>
     </div>
   </div>
@@ -148,6 +188,7 @@ const scene_canvas = mustGetElement<HTMLCanvasElement>('#scene_canvas')
 const status_el = mustGetElement<HTMLElement>('#status_el')
 const lights_status_el = mustGetElement<HTMLElement>('#lights_status_el')
 const render_status_el = mustGetElement<HTMLElement>('#render_status_el')
+const look_status_el = mustGetElement<HTMLElement>('#look_status_el')
 const audio_el = mustGetElement<HTMLAudioElement>('#audio_el')
 
 // Default to repeating playback.
@@ -163,6 +204,12 @@ const start_record_button = mustGetElement<HTMLButtonElement>('#start_record_but
 const stop_record_button = mustGetElement<HTMLButtonElement>('#stop_record_button')
 const download_link = mustGetElement<HTMLAnchorElement>('#download_link')
 const select_recommended_button = mustGetElement<HTMLButtonElement>('#select_recommended_button')
+const preview_talk_button = mustGetElement<HTMLButtonElement>('#preview_talk_button')
+const stop_preview_button = mustGetElement<HTMLButtonElement>('#stop_preview_button')
+const run_hover_button = mustGetElement<HTMLButtonElement>('#run_hover_button')
+const run_spin_button = mustGetElement<HTMLButtonElement>('#run_spin_button')
+const run_orbit_button = mustGetElement<HTMLButtonElement>('#run_orbit_button')
+
 const talk_materials_list = mustGetElement<HTMLDivElement>('#talk_materials_list')
 const idle_glow_input = mustGetElement<HTMLInputElement>('#idle_glow')
 const talk_scale_input = mustGetElement<HTMLInputElement>('#talk_scale')
@@ -185,6 +232,10 @@ const enable_bounce_light_input = mustGetElement<HTMLInputElement>('#enable_boun
 const enable_talk_light_inner_input = mustGetElement<HTMLInputElement>('#enable_talk_light_inner')
 const enable_talk_light_eye_input = mustGetElement<HTMLInputElement>('#enable_talk_light_eye')
 const enable_axes_helper_input = mustGetElement<HTMLInputElement>('#enable_axes_helper')
+const enable_grid_floor_input = mustGetElement<HTMLInputElement>('#enable_grid_floor')
+const align_world_axes_to_model_input = mustGetElement<HTMLInputElement>('#align_world_axes_to_model')
+const enable_model_axes_helper_input = mustGetElement<HTMLInputElement>('#enable_model_axes_helper')
+const enable_model_forward_helper_input = mustGetElement<HTMLInputElement>('#enable_model_forward_helper')
 
 const enable_aces_input = mustGetElement<HTMLInputElement>('#enable_aces')
 const exposure_input = mustGetElement<HTMLInputElement>('#exposure')
@@ -192,7 +243,18 @@ const phong_specular_input = mustGetElement<HTMLInputElement>('#phong_specular')
 const phong_shininess_input = mustGetElement<HTMLInputElement>('#phong_shininess')
 const enable_env_input = mustGetElement<HTMLInputElement>('#enable_env')
 const env_reflectivity_input = mustGetElement<HTMLInputElement>('#env_reflectivity')
-const rebind_eye_texture_button = mustGetElement<HTMLButtonElement>('#rebind_eye_texture_button')
+
+const reset_look_rot_button = mustGetElement<HTMLButtonElement>('#reset_look_rot_button')
+const look_rot_x_deg_input = mustGetElement<HTMLInputElement>('#look_rot_x_deg')
+const look_rot_y_deg_input = mustGetElement<HTMLInputElement>('#look_rot_y_deg')
+const look_rot_z_deg_input = mustGetElement<HTMLInputElement>('#look_rot_z_deg')
+
+const reset_model_pose_button = mustGetElement<HTMLButtonElement>('#reset_model_pose_button')
+const model_pos_x_input = mustGetElement<HTMLInputElement>('#model_pos_x')
+const model_pos_y_input = mustGetElement<HTMLInputElement>('#model_pos_y')
+const model_pos_z_input = mustGetElement<HTMLInputElement>('#model_pos_z')
+
+const debug_home_pose_input = mustGetElement<HTMLInputElement>('#debug_home_pose')
 
 const url_params = new URLSearchParams(window.location.search)
 const initial_audio_url = url_params.get('audio')
@@ -255,27 +317,49 @@ setupCollapsibleHudSections()
 function setupCollapsibleHudSections(): void {
   const sections = [...document.querySelectorAll<HTMLElement>('#hud .section')]
 
-  for (const section of sections) {
+  function getStorageKey(section_id: string): string {
+    return `monitor_avatar.hud.section.${section_id}.collapsed`
+  }
+
+  function readCollapsed(section_id: string): boolean | null {
+    try {
+      const v = window.localStorage.getItem(getStorageKey(section_id))
+      if (v === null) return null
+      return v === '1'
+    } catch {
+      return null
+    }
+  }
+
+  function writeCollapsed(section_id: string, collapsed: boolean): void {
+    try {
+      window.localStorage.setItem(getStorageKey(section_id), collapsed ? '1' : '0')
+    } catch {
+      // ignore
+    }
+  }
+
+  for (const [section_index, section] of sections.entries()) {
     const h2 = section.querySelector<HTMLElement>('h2')
     if (!h2) continue
 
+    const section_id = section.dataset.sectionId || `section_${section_index}`
+
     h2.tabIndex = 0
     h2.setAttribute('role', 'button')
-    h2.setAttribute('aria-expanded', 'true')
 
-    const setCollapsed = (collapsed: boolean): void => {
+    const setCollapsed = (collapsed: boolean, persist: boolean): void => {
       section.classList.toggle('collapsed', collapsed)
       h2.setAttribute('aria-expanded', collapsed ? 'false' : 'true')
 
-      for (const child of [...section.children]) {
-        if (child === h2) continue
-        ;(child as HTMLElement).hidden = collapsed
-      }
+      // Collapse behavior is handled by CSS (more robust than relying on the `hidden` attribute,
+      // which can be overridden by layout rules like `.row { display: flex; }`).
+      if (persist) writeCollapsed(section_id, collapsed)
     }
 
     const toggle = (): void => {
       const next_collapsed = !section.classList.contains('collapsed')
-      setCollapsed(next_collapsed)
+      setCollapsed(next_collapsed, true)
     }
 
     h2.addEventListener('click', toggle)
@@ -285,8 +369,9 @@ function setupCollapsibleHudSections(): void {
       toggle()
     })
 
-    // Default: expanded
-    setCollapsed(false)
+    // Default: collapsed (unless we have a stored preference).
+    const stored = readCollapsed(section_id)
+    setCollapsed(stored ?? true, false)
   }
 }
 
@@ -300,6 +385,10 @@ function setLightsStatus(text: string): void {
 
 function setRenderStatus(text: string): void {
   render_status_el.textContent = text
+}
+
+function setLookStatus(text: string): void {
+  look_status_el.textContent = text
 }
 
 function parseNumberInput(input: HTMLInputElement): number {
@@ -382,6 +471,30 @@ const env_texture = pmrem_generator.fromScene(new RoomEnvironment(), 0.04).textu
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 2000)
 camera.position.set(0, 0.7, 2.5)
 
+// Camera debug locking.
+// Used by:
+// - "Debug home pose (freeze)" (strict deterministic baseline)
+// - optionally when aligning world axes to model (static, head-on view)
+let home_camera_lock_active = false
+const saved_camera_position = new THREE.Vector3()
+const saved_camera_quaternion = new THREE.Quaternion()
+const saved_controls_target = new THREE.Vector3()
+let saved_controls_enabled = true
+
+const origin = new THREE.Vector3(0, 0, 0)
+const home_camera_distance = 2.15
+
+const tmp_camera_lock_target = new THREE.Vector3()
+const tmp_camera_lock_forward = new THREE.Vector3()
+const tmp_camera_lock_up = new THREE.Vector3()
+
+const tmp_camera_forward = new THREE.Vector3()
+const tmp_camera_approach_target = new THREE.Vector3()
+const tmp_camera_approach_to_target = new THREE.Vector3()
+const tmp_face_forward_world = new THREE.Vector3()
+const tmp_move_dir = new THREE.Vector3()
+const tmp_base_pos = new THREE.Vector3()
+
 const controls = new OrbitControls(camera, scene_canvas)
 controls.enableDamping = true
 controls.dampingFactor = 0.08
@@ -445,13 +558,275 @@ const clock = new THREE.Clock()
 
 // Debug helpers (makes it obvious if WebGL rendering is working even if the FBX fails to load)
 const axes_helper = new THREE.AxesHelper(0.4)
-axes_helper.position.set(0, 0.1, 0)
+const world_axes_base_position = new THREE.Vector3(0, 0, 0)
+axes_helper.position.copy(world_axes_base_position)
 scene.add(axes_helper)
 
-let monitor_root: THREE.Object3D | null = null
+// Simple ground reference.
+const grid_floor = new THREE.GridHelper(8, 40, 0x274055, 0x162533)
+grid_floor.position.set(0, -0.6, 0)
+scene.add(grid_floor)
+
+// Model-local debug helpers (attached to monitor_root after load).
+
+const model_axes_helper = new THREE.AxesHelper(0.35)
+model_axes_helper.visible = false
+
+const model_forward_arrow_pos = new THREE.ArrowHelper(
+  new THREE.Vector3(0, 0, 1),
+  new THREE.Vector3(0, 0, 0),
+  0.45,
+  0xff00ff,
+)
+model_forward_arrow_pos.visible = false
+
+const model_forward_arrow_neg = new THREE.ArrowHelper(
+  new THREE.Vector3(0, 0, -1),
+  new THREE.Vector3(0, 0, 0),
+  0.45,
+  0x00ffff,
+)
+model_forward_arrow_neg.visible = false
+
+function makeOverlayMaterial(material: THREE.Material | THREE.Material[]): void {
+  const mats = Array.isArray(material) ? material : [material]
+  for (const mat of mats) {
+    mat.depthTest = false
+    mat.depthWrite = false
+
+    // Keep overlay/debug colors stable under tone mapping.
+    // (Not all materials use this, but it's safe to set when present.)
+    ;(mat as unknown as { toneMapped?: boolean }).toneMapped = false
+  }
+}
+
+// Make helpers visible even when they are inside the mesh.
+const overlay_render_order = 999
+
+model_axes_helper.renderOrder = overlay_render_order
+model_axes_helper.frustumCulled = false
+makeOverlayMaterial(model_axes_helper.material as THREE.Material | THREE.Material[])
+
+for (const arrow of [model_forward_arrow_pos, model_forward_arrow_neg]) {
+  // NOTE: renderOrder is per-object (children do not inherit), so apply to the arrow parts.
+  arrow.line.renderOrder = overlay_render_order
+  arrow.cone.renderOrder = overlay_render_order
+
+  arrow.line.frustumCulled = false
+  arrow.cone.frustumCulled = false
+
+  makeOverlayMaterial(arrow.line.material as THREE.Material | THREE.Material[])
+  makeOverlayMaterial(arrow.cone.material as THREE.Material | THREE.Material[])
+}
+
+let monitor_root: THREE.Group | null = null
+let monitor_root_base_position: THREE.Vector3 | null = null
+let monitor_root_base_quaternion: THREE.Quaternion | null = null
+
+// "Face camera" calibration (computed after load from the eye core position).
+let monitor_face_to_neg_z_quat: THREE.Quaternion | null = null
+let monitor_face_forward_local: THREE.Vector3 | null = null
+
+const neg_z_axis = new THREE.Vector3(0, 0, -1)
+const world_up = new THREE.Vector3(0, 1, 0)
+
+const tmp_mat_a = new THREE.Matrix4()
+const tmp_quat_a = new THREE.Quaternion()
+const tmp_quat_b = new THREE.Quaternion()
+const tmp_quat_c = new THREE.Quaternion()
+const tmp_quat_face_camera = new THREE.Quaternion()
+const tmp_euler_a = new THREE.Euler()
+
+// Look rotation offset (degrees 0..360).
+// We build this using axis-angle quaternions (yaw/pitch/roll composition) to keep behavior simple.
+const tmp_quat_look_rot = new THREE.Quaternion()
+const tmp_quat_look_rot_x = new THREE.Quaternion()
+const tmp_quat_look_rot_y = new THREE.Quaternion()
+const tmp_quat_look_rot_z = new THREE.Quaternion()
+
+const axis_x = new THREE.Vector3(1, 0, 0)
+const axis_y = new THREE.Vector3(0, 1, 0)
+const axis_z = new THREE.Vector3(0, 0, 1)
+
+function wrapDeg180(deg_0_360: number): number {
+  const d = ((deg_0_360 % 360) + 360) % 360
+  return d > 180 ? d - 360 : d
+}
+
+function updateLookRotQuat(out: THREE.Quaternion): THREE.Quaternion {
+  const x_deg = wrapDeg180(parseNumberInput(look_rot_x_deg_input))
+  const y_deg = wrapDeg180(parseNumberInput(look_rot_y_deg_input))
+  const z_deg = wrapDeg180(parseNumberInput(look_rot_z_deg_input))
+
+  tmp_quat_look_rot_x.setFromAxisAngle(axis_x, THREE.MathUtils.degToRad(x_deg))
+  tmp_quat_look_rot_y.setFromAxisAngle(axis_y, THREE.MathUtils.degToRad(y_deg))
+  tmp_quat_look_rot_z.setFromAxisAngle(axis_z, THREE.MathUtils.degToRad(z_deg))
+
+  // Apply Y then X then Z (yaw, pitch, roll).
+  out.identity()
+  out.multiply(tmp_quat_look_rot_y)
+  out.multiply(tmp_quat_look_rot_x)
+  out.multiply(tmp_quat_look_rot_z)
+  return out
+}
+
+// Companion-style idle wander state.
+let talk_needed_active = false
+let attention_amount = 0
+const wander_offset = new THREE.Vector3()
+const wander_goal_offset = new THREE.Vector3()
+let wander_next_goal_t = 0
+
+// Persistent talk-time approach offset (in world space).
+const talk_camera_approach_offset = new THREE.Vector3()
+
+// Persistent talk-time facing offset (relative to base_quaternion * look_rot).
+// This avoids snapping back to the original "home" direction after talking ends.
+const talk_camera_face_offset_quat = new THREE.Quaternion()
+
+// Approach timing state (seconds are in clock elapsed-time space).
+let talk_camera_approach_end_t = 0
+let talk_needed_was_active = false
+
 let materials: material_with_emissive[] = []
 let talk_targets: talk_target[] = []
 let talk_material_uuid_set = new Set<string>()
+
+type talk_motion_style = 'excited_hover' | 'spin_bursts' | 'orbit_swoop'
+
+let talk_motion_active = false
+let talk_motion_style: talk_motion_style = 'excited_hover'
+let talk_motion_start_t = 0
+
+let manual_preview_controls_enabled = false
+
+let manual_preview_active = false
+let manual_preview_start_t = 0
+let manual_preview_end_t = 0
+let manual_preview_forced_style: talk_motion_style | null = null
+
+const manual_preview_default_duration_s = 2.0
+
+// Talk-time camera-facing + approach tuning
+const talk_attention_lambda = 4.0
+const idle_attention_lambda = 2.8
+
+// Target point is in front of the camera along its forward direction.
+const talk_camera_approach_distance = 3.45
+
+// Approach should take ~3s regardless of distance (with slight jitter so it isn't always identical).
+const talk_camera_approach_duration_base_s = 3.0
+const talk_camera_approach_duration_jitter_s = 0.35
+
+// Slow down near target so it doesn't "snap" to a stop.
+const talk_camera_approach_slow_distance = 0.9
+
+// Safety cap to avoid extreme leaps if the camera/target jumps.
+const talk_camera_approach_max_speed = 200.0
+const talk_camera_approach_min_time_left_s = 0.35
+
+// Steering toward the target prevents ending up offset left/right.
+const talk_camera_approach_min_facing_dot = 0.05
+const talk_camera_approach_steer_strength = 1.25
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value))
+}
+
+function smoothstep(edge_0: number, edge_1: number, x: number): number {
+  const t = clamp01((x - edge_0) / (edge_1 - edge_0))
+  return t * t * (3 - 2 * t)
+}
+
+function dampNumber(current: number, target: number, lambda: number, dt_s: number): number {
+  return current + (target - current) * (1 - Math.exp(-lambda * dt_s))
+}
+
+
+function randRange(min: number, max: number): number {
+  return min + Math.random() * (max - min)
+}
+
+function easeInOutCubic(t: number): number {
+  const x = clamp01(t)
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
+}
+
+function updateManualPreviewButtons(): void {
+  const now_t = clock.getElapsedTime()
+  const is_active = manual_preview_active && now_t <= manual_preview_end_t
+
+  preview_talk_button.disabled = !manual_preview_controls_enabled
+  run_hover_button.disabled = !manual_preview_controls_enabled
+  run_spin_button.disabled = !manual_preview_controls_enabled
+  run_orbit_button.disabled = !manual_preview_controls_enabled
+
+  stop_preview_button.disabled = !manual_preview_controls_enabled || !is_active
+}
+
+function stopManualPreview(): void {
+  manual_preview_active = false
+  manual_preview_end_t = 0
+  manual_preview_forced_style = null
+
+  talk_motion_active = false
+  updateManualPreviewButtons()
+}
+
+function startManualPreview(manual_preview_options: { forced_style: talk_motion_style | null; duration_s?: number }): void {
+  const now_t = clock.getElapsedTime()
+  const duration_s = manual_preview_options.duration_s ?? manual_preview_default_duration_s
+
+  manual_preview_active = true
+  manual_preview_start_t = now_t
+  manual_preview_end_t = now_t + Math.max(0.1, duration_s)
+  manual_preview_forced_style = manual_preview_options.forced_style
+
+  if (manual_preview_forced_style) {
+    talk_motion_active = true
+    talk_motion_style = manual_preview_forced_style
+    talk_motion_start_t = now_t
+  } else {
+    talk_motion_active = false
+  }
+
+  updateManualPreviewButtons()
+}
+
+function getManualPreviewProgress(now_t: number): number | null {
+  if (!manual_preview_active) return null
+  if (now_t > manual_preview_end_t) {
+    stopManualPreview()
+    return null
+  }
+
+  const duration_s = Math.max(0.001, manual_preview_end_t - manual_preview_start_t)
+  return clamp01((now_t - manual_preview_start_t) / duration_s)
+}
+
+function getManualPreviewTalkStrength(now_t: number): number | null {
+  const p = getManualPreviewProgress(now_t)
+  if (p === null) return null
+
+  // Smooth fade-in/out so the preview doesn't pop.
+  const fade_in = smoothstep(0, 0.12, p)
+  const fade_out = 1 - smoothstep(0.88, 1, p)
+  const fade = Math.max(0, Math.min(fade_in, fade_out))
+
+  // Pseudo-speech envelope (deterministic): mix a few frequencies and shape to feel syllable-like.
+  const a = 0.5 + 0.5 * Math.sin(now_t * 11.3)
+  const b = 0.5 + 0.5 * Math.sin(now_t * 7.1 + 0.8)
+  const c = 0.5 + 0.5 * Math.sin(now_t * 3.2 + 1.7)
+
+  const syllable = Math.pow(0.55 * a + 0.35 * b + 0.10 * c, 2.2)
+  const strength = clamp01(0.15 + 0.85 * syllable)
+
+  return strength * fade
+}
+
+function clampAbs(value: number, max_abs: number): number {
+  return Math.max(-max_abs, Math.min(max_abs, value))
+}
 
 // Sketchfab has multiple materials involved in the "eye":
 // - EyeMaterial: outer lens/shell (albedo: monitor4UV.png)
@@ -1070,13 +1445,18 @@ const fbx_loader = new FBXLoader(manager)
 fbx_loader.load(
   model_url,
   (object) => {
-    monitor_root = object
-    monitor_root.rotation.y = Math.PI
+    const monitor_model = object
+
+    // Wrapper root with a centered pivot.
+    monitor_root = new THREE.Group()
+    monitor_root.add(monitor_model)
+
+    // Keep the model's authored orientation by default (no extra rotations).
 
     let mesh_count = 0
     const material_by_uuid = new Map<string, material_with_emissive>()
 
-    monitor_root.traverse((child) => {
+    monitor_model.traverse((child) => {
       if (!(child instanceof THREE.Mesh)) return
       mesh_count++
 
@@ -1133,13 +1513,15 @@ fbx_loader.load(
     }
 
     // Texture setup (eye, LEDs, etc)
-    rebind_eye_texture_button.disabled = false
     ensureSketchfabTexturesBound()
 
     select_recommended_button.disabled = false
     selectRecommendedTalkMaterials()
 
-    const box = new THREE.Box3().setFromObject(monitor_root)
+    manual_preview_controls_enabled = true
+    updateManualPreviewButtons()
+
+    const box = new THREE.Box3().setFromObject(monitor_model)
     const center = box.getCenter(new THREE.Vector3())
     const size = box.getSize(new THREE.Vector3())
 
@@ -1147,10 +1529,14 @@ fbx_loader.load(
     const desired_size = 1.1
     const scale = max_dim > 0 ? desired_size / max_dim : 1
 
-    // Important: FBX units are huge. We must center using the *scaled* center, otherwise the model
-    // gets translated hundreds of world units away and becomes invisible.
-    monitor_root.scale.setScalar(scale)
-    monitor_root.position.set(-center.x * scale, -center.y * scale, -center.z * scale)
+    // Place the grid just under the model.
+    grid_floor.position.y = -size.y * scale * 0.5 - 0.05
+
+    // Important: FBX units are huge. Scale the model down to fit the view.
+    monitor_model.scale.setScalar(scale)
+
+    // Center the model *inside the wrapper root* so the wrapper's origin is the model center.
+    monitor_model.position.set(-center.x * scale, -center.y * scale, -center.z * scale)
 
     // Attach and position talk spill lights based on actual material bounds.
     for (const light of [
@@ -1175,12 +1561,50 @@ fbx_loader.load(
       monitor_root.add(target)
     }
 
+    // Model debug helpers.
+    if (model_axes_helper.parent) model_axes_helper.parent.remove(model_axes_helper)
+    if (model_forward_arrow_pos.parent) model_forward_arrow_pos.parent.remove(model_forward_arrow_pos)
+    if (model_forward_arrow_neg.parent) model_forward_arrow_neg.parent.remove(model_forward_arrow_neg)
+    monitor_root.add(model_axes_helper)
+    monitor_root.add(model_forward_arrow_pos)
+    monitor_root.add(model_forward_arrow_neg)
+
+    // Place helpers slightly above center so they don't get lost inside the geometry.
+    model_axes_helper.position.set(0, 0.05, 0)
+    model_forward_arrow_pos.position.set(0, 0.05, 0)
+    model_forward_arrow_neg.position.set(0, 0.05, 0)
+
+
     monitor_root.updateMatrixWorld(true)
 
     // Eye front/back are derived from the eye core material bounds.
+    // We also use the eye core's center offset from the model root origin as a proxy for "face" direction.
+    // (This is more intuitive than using the model's raw +Z axis, since the imported FBX axes may not align
+    // to what humans perceive as "forward" when looking at the eye.)
     if (eye_core_material) {
       const bounds = computeMaterialBoundsInRoot(monitor_root, eye_core_material.uuid)
       if (bounds) {
+        // Face direction: from model center (root origin) toward the eye core center.
+        // Flatten Y to keep the indicator stable (primarily yaw), since the monitor is roughly symmetric.
+        const face_dir = bounds.center_root.clone()
+        face_dir.y = 0
+        if (face_dir.lengthSq() > 0.000001) {
+          // Empirically, the imported FBX's perceived “face” direction is opposite the eye core center offset.
+          // Invert so the magenta arrow points toward the eye.
+          face_dir.normalize().negate()
+
+          model_forward_arrow_pos.setDirection(face_dir)
+          model_forward_arrow_neg.setDirection(face_dir.clone().negate())
+
+          // Store "face forward" in the model's local space (root space).
+          monitor_face_forward_local = face_dir.clone()
+
+          // Build a correction quaternion so we can use Object3D lookAt (-Z toward target)
+          // while treating `face_dir` as the model's true forward.
+          monitor_face_to_neg_z_quat = monitor_face_to_neg_z_quat ?? new THREE.Quaternion()
+          monitor_face_to_neg_z_quat.setFromUnitVectors(face_dir, neg_z_axis)
+        }
+
         const depth = bounds.size_root.z
         const z_margin = Math.max(0.02, depth * 0.18)
         const dist = Math.max(0.2, bounds.size_root.length() * 0.9)
@@ -1239,12 +1663,20 @@ fbx_loader.load(
     }
 
     // Place bounce light under the model.
-    bounce_light.position.set(0, -Math.max(0.35, (box.max.y - center.y) * scale * 0.9), 0.1)
+    if (monitor_root) {
+      monitor_root.updateMatrixWorld(true)
+      const box_after = new THREE.Box3().setFromObject(monitor_root)
+      const size_after = box_after.getSize(new THREE.Vector3())
+      bounce_light.position.set(0, box_after.min.y - Math.max(0.12, size_after.y * 0.12), 0.1)
+    }
 
     scene.add(monitor_root)
 
-    camera.position.set(0, 0.35, 2.15)
-    camera.lookAt(0, 0.15, 0)
+    // Capture base transform after centering/scale; animations are applied as offsets from this.
+    monitor_root_base_position = new THREE.Vector3(0, 0, 0)
+    monitor_root.position.copy(monitor_root_base_position)
+
+    monitor_root_base_quaternion = monitor_root.quaternion.clone()
 
     setStatus(
       `Model loaded (meshes: ${mesh_count}, materials: ${materials.length}, size: ${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}). Audio glow will animate whenever audio is playing.`,
@@ -1272,18 +1704,61 @@ select_recommended_button.addEventListener('click', () => {
   selectRecommendedTalkMaterials()
 })
 
-rebind_eye_texture_button.addEventListener('click', () => {
-  ensureSketchfabTexturesBound(true)
+reset_look_rot_button.addEventListener('click', () => {
+  look_rot_x_deg_input.value = String(default_look_rot_x_deg)
+  look_rot_y_deg_input.value = String(default_look_rot_y_deg)
+  look_rot_z_deg_input.value = String(default_look_rot_z_deg)
 
-  const shell_base = textureBasename(eye_shell_material?.map) ?? '(none)'
-  const inner_base = textureBasename(inner_eye_material?.map) ?? '(none)'
-  const core_base = textureBasename(eye_core_material?.map) ?? '(none)'
-  const leds_base = textureBasename(leds_material?.map) ?? '(none)'
-  const booster_base = textureBasename(booster_material?.map) ?? '(none)'
+  // Reset talk-time offsets so the calibration reset is truly deterministic.
+  talk_camera_face_offset_quat.identity()
+  talk_camera_approach_offset.set(0, 0, 0)
 
-  setStatus(
-    `Textures: eye_shell=${shell_base} eye_inner=${inner_base} eye_core=${core_base} leds=${leds_base} booster=${booster_base}`,
-  )
+  // Update slider readouts immediately.
+  look_rot_x_deg_input.dispatchEvent(new Event('input'))
+  look_rot_y_deg_input.dispatchEvent(new Event('input'))
+  look_rot_z_deg_input.dispatchEvent(new Event('input'))
+})
+
+reset_model_pose_button.addEventListener('click', () => {
+  model_pos_x_input.value = '0'
+  model_pos_y_input.value = '0'
+  model_pos_z_input.value = '0'
+
+  look_rot_x_deg_input.value = String(default_look_rot_x_deg)
+  look_rot_y_deg_input.value = String(default_look_rot_y_deg)
+  look_rot_z_deg_input.value = String(default_look_rot_z_deg)
+
+  // Reset talk-time offsets so the calibration reset is truly deterministic.
+  talk_camera_face_offset_quat.identity()
+  talk_camera_approach_offset.set(0, 0, 0)
+
+  model_pos_x_input.dispatchEvent(new Event('input'))
+  model_pos_y_input.dispatchEvent(new Event('input'))
+  model_pos_z_input.dispatchEvent(new Event('input'))
+
+  look_rot_x_deg_input.dispatchEvent(new Event('input'))
+  look_rot_y_deg_input.dispatchEvent(new Event('input'))
+  look_rot_z_deg_input.dispatchEvent(new Event('input'))
+})
+
+preview_talk_button.addEventListener('click', () => {
+  startManualPreview({ forced_style: null })
+})
+
+stop_preview_button.addEventListener('click', () => {
+  stopManualPreview()
+})
+
+run_hover_button.addEventListener('click', () => {
+  startManualPreview({ forced_style: 'excited_hover' })
+})
+
+run_spin_button.addEventListener('click', () => {
+  startManualPreview({ forced_style: 'spin_bursts' })
+})
+
+run_orbit_button.addEventListener('click', () => {
+  startManualPreview({ forced_style: 'orbit_swoop' })
 })
 
 // --- Audio + analysis ---
@@ -1462,25 +1937,307 @@ function animate(): void {
   requestAnimationFrame(animate)
   resizeRendererToDisplaySize()
 
-  clock.getDelta()
+  const dt_s = Math.min(clock.getDelta(), 0.05)
   const t = clock.getElapsedTime()
 
-  if (monitor_root) {
-    monitor_root.position.y = Math.sin(t * 0.9) * 0.04
-    monitor_root.rotation.y = Math.PI + Math.sin(t * 0.25) * 0.35
-    monitor_root.rotation.x = Math.sin(t * 0.35) * 0.06
+  const debug_home_pose = debug_home_pose_input.checked
+
+  // If we're debugging home pose, or aligning world axes to the model for debugging, lock the camera to a static head-on view.
+  const should_lock_camera = debug_home_pose ||
+    (enable_axes_helper_input.checked && align_world_axes_to_model_input.checked)
+
+  if (should_lock_camera && !home_camera_lock_active) {
+    saved_camera_position.copy(camera.position)
+    saved_camera_quaternion.copy(camera.quaternion)
+    saved_controls_target.copy(controls.target)
+    saved_controls_enabled = controls.enabled
+    home_camera_lock_active = true
+  }
+
+  if (!should_lock_camera && home_camera_lock_active) {
+    camera.position.copy(saved_camera_position)
+    camera.quaternion.copy(saved_camera_quaternion)
+    controls.target.copy(saved_controls_target)
+    controls.enabled = saved_controls_enabled
+    controls.update()
+    home_camera_lock_active = false
+  }
+
+  if (should_lock_camera) {
+    controls.enabled = false
+
+    // Head-on view.
+    // - In home-pose debug: camera is world-anchored, looking at origin.
+    // - In axis-align debug: camera is aligned to the model frame, looking at the model.
+    if (debug_home_pose) {
+      tmp_camera_lock_target.copy(origin)
+      tmp_camera_lock_forward.set(0, 0, 1)
+      tmp_camera_lock_up.set(0, 1, 0)
+    } else {
+      if (monitor_root) tmp_camera_lock_target.copy(monitor_root.position)
+      else tmp_camera_lock_target.copy(world_axes_base_position)
+
+      tmp_camera_lock_forward.set(0, 0, 1)
+      tmp_camera_lock_up.set(0, 1, 0)
+
+      if (monitor_root) {
+        tmp_camera_lock_forward.applyQuaternion(monitor_root.quaternion).normalize()
+        tmp_camera_lock_up.applyQuaternion(monitor_root.quaternion).normalize()
+      }
+    }
+
+    camera.up.copy(tmp_camera_lock_up)
+    camera.position.copy(tmp_camera_lock_target).addScaledVector(tmp_camera_lock_forward, home_camera_distance)
+    camera.lookAt(tmp_camera_lock_target)
+
+    controls.target.copy(tmp_camera_lock_target)
+    controls.update()
   }
 
   const analyser = analyser_node
   const buffer = time_domain_buffer
 
   let talk_strength = 0
-  if (analyser && buffer && !audio_el.paused) {
+
+  const manual_strength = getManualPreviewTalkStrength(t)
+  if (manual_strength !== null) {
+    talk_strength = smoothTalkStrength(manual_strength)
+  } else if (analyser && buffer && !audio_el.paused) {
     const rms = computeRms(analyser, buffer)
     talk_strength = smoothTalkStrength(shapeTalkStrength(rms))
   } else {
     talk_strength = smoothTalkStrength(0)
   }
+
+  // Personality motion offsets (added on top of the existing idle animation).
+  let talk_offset_x = 0
+  let talk_offset_y = 0
+  let talk_offset_z = 0
+
+  let talk_rot_x = 0
+  let talk_rot_y = 0
+  let talk_rot_z = 0
+
+  const manual_p = getManualPreviewProgress(t)
+  const motion_enabled = Boolean(talk_motion_active && manual_preview_forced_style && manual_p !== null)
+
+  if (motion_enabled && manual_p !== null) {
+    const tt = t - talk_motion_start_t
+
+    // Smooth motion envelope (not tied to syllable-level talk_strength).
+    const motion_amount = Math.min(
+      smoothstep(0, 0.18, manual_p),
+      1 - smoothstep(0.82, 1, manual_p),
+    )
+
+    if (talk_motion_style === 'excited_hover') {
+      const amt = motion_amount
+      talk_offset_y += Math.sin(t * 2.2) * 0.02 * amt
+      talk_offset_x += Math.sin(t * 1.7) * 0.05 * amt
+      talk_offset_z += Math.sin(t * 0.9) * Math.cos(t * 1.3) * 0.04 * amt
+      talk_rot_z += Math.sin(t * 2.6) * 0.25 * amt
+    } else if (talk_motion_style === 'spin_bursts') {
+      // Spin a whole-number of turns so the preview ends at the same orientation.
+      const spin_turns = 2
+      const spin_p = easeInOutCubic(manual_p)
+      talk_rot_y += spin_turns * Math.PI * 2 * spin_p
+
+      // Add a tiny drift so it doesn't feel perfectly mechanical.
+      talk_offset_x += Math.sin(t * 2.4) * 0.01 * motion_amount
+    } else if (talk_motion_style === 'orbit_swoop') {
+      const a = tt * 1.3
+      const r = 0.06 * motion_amount
+
+      talk_offset_x += Math.cos(a) * r
+      talk_offset_z += Math.sin(a) * r
+      talk_offset_y += Math.sin(tt * 1.8) * 0.01 * motion_amount
+
+      talk_rot_z += Math.sin(a) * 0.18 * motion_amount
+    }
+
+    // Guardrails
+    talk_offset_x = clampAbs(talk_offset_x, 0.12)
+    talk_offset_y = clampAbs(talk_offset_y, 0.06)
+    talk_offset_z = clampAbs(talk_offset_z, 0.12)
+    talk_rot_z = clampAbs(talk_rot_z, 0.45)
+  }
+
+  const model_pos_offset_x = parseNumberInput(model_pos_x_input)
+  const model_pos_offset_y = parseNumberInput(model_pos_y_input)
+  const model_pos_offset_z = parseNumberInput(model_pos_z_input)
+
+  if (debug_home_pose) {
+    // Strict baseline:
+    // - freeze all motion
+    // - camera is locked head-on
+    // - model transform is driven ONLY by the debug sliders (plus the base position, typically 0,0,0)
+    if (monitor_root) {
+      if (monitor_root_base_position) {
+        monitor_root.position.set(
+          monitor_root_base_position.x + model_pos_offset_x,
+          monitor_root_base_position.y + model_pos_offset_y,
+          monitor_root_base_position.z + model_pos_offset_z,
+        )
+      } else {
+        monitor_root.position.set(model_pos_offset_x, model_pos_offset_y, model_pos_offset_z)
+      }
+
+      updateLookRotQuat(tmp_quat_look_rot)
+      monitor_root.quaternion.copy(tmp_quat_look_rot)
+    }
+  } else {
+    // Determine when the avatar is "needed". For now: the whole time audio is playing.
+    const is_talking = manual_preview_active || !audio_el.paused
+
+    talk_needed_active = is_talking
+
+    // Start a new approach window when talking begins.
+    if (talk_needed_active && !talk_needed_was_active) {
+      const jitter = randRange(-talk_camera_approach_duration_jitter_s, talk_camera_approach_duration_jitter_s)
+      const duration_s = Math.max(0.6, talk_camera_approach_duration_base_s + jitter)
+      talk_camera_approach_end_t = t + duration_s
+    }
+    talk_needed_was_active = talk_needed_active
+
+    const attention_target = talk_needed_active ? 1 : 0
+    attention_amount = dampNumber(
+      attention_amount,
+      attention_target,
+      talk_needed_active ? talk_attention_lambda : idle_attention_lambda,
+      dt_s,
+    )
+
+    // While talking we should still drift (not become rigid), but keep it closer to "home".
+    const pos_scale = talk_needed_active ? 0.7 : 1.0
+
+    // When talking we don't need to perfectly "lock" rotation; we just want it to stay generally near home.
+    const min_rot_scale_when_talking = 0.35
+    const rot_scale = 1 - attention_amount * (1 - min_rot_scale_when_talking)
+
+    // Update wander goal every few seconds.
+    if (t >= wander_next_goal_t) {
+      const wander_xy_range = talk_needed_active ? 0.07 : 0.14
+      const wander_y_min = talk_needed_active ? -0.03 : -0.05
+      const wander_y_max = talk_needed_active ? 0.07 : 0.10
+
+      wander_goal_offset.set(
+        randRange(-wander_xy_range, wander_xy_range),
+        randRange(wander_y_min, wander_y_max),
+        randRange(-wander_xy_range, wander_xy_range),
+      )
+
+      const next_min = talk_needed_active ? 0.9 : 1.3
+      const next_max = talk_needed_active ? 2.1 : 3.2
+      wander_next_goal_t = t + randRange(next_min, next_max)
+    }
+
+    // Smoothly drift toward the goal.
+    const wander_lambda = talk_needed_active ? 2.1 : 1.25
+    wander_offset.x = dampNumber(wander_offset.x, wander_goal_offset.x, wander_lambda, dt_s)
+    wander_offset.y = dampNumber(wander_offset.y, wander_goal_offset.y, wander_lambda, dt_s)
+    wander_offset.z = dampNumber(wander_offset.z, wander_goal_offset.z, wander_lambda, dt_s)
+
+    // Apply base + idle + wander + talk offsets.
+    if (monitor_root && monitor_root_base_position && monitor_root_base_quaternion) {
+      // Keep the existing idle motion as a subtle baseline.
+      const idle_offset_y = Math.sin(t * 0.9) * 0.04
+      const idle_rot_y = Math.sin(t * 0.25) * 0.35 * rot_scale
+      const idle_rot_x = Math.sin(t * 0.35) * 0.06 * rot_scale
+
+      // Companion wander.
+      const wander_x = wander_offset.x * pos_scale
+      const wander_y = wander_offset.y * pos_scale
+      const wander_z = wander_offset.z * pos_scale
+
+      // Base position (without the talk-time approach offset).
+      tmp_base_pos.set(
+        monitor_root_base_position.x + model_pos_offset_x + wander_x + talk_offset_x,
+        monitor_root_base_position.y + model_pos_offset_y + idle_offset_y + wander_y + talk_offset_y,
+        monitor_root_base_position.z + model_pos_offset_z + wander_z + talk_offset_z,
+      )
+
+      // Include the approach offset when computing facing, so lookAt uses the true rendered position.
+      monitor_root.position.copy(tmp_base_pos).add(talk_camera_approach_offset)
+
+      // "Home" rotation (decoupled from camera): base orientation + user look rotation offset.
+      tmp_quat_c.copy(monitor_root_base_quaternion)
+      updateLookRotQuat(tmp_quat_look_rot)
+      tmp_quat_c.multiply(tmp_quat_look_rot)
+
+      // While talking, update the persistent facing offset toward the camera.
+      // When talking ends, we keep this offset (so we don't snap back to the original home direction).
+      if (talk_needed_active && monitor_face_to_neg_z_quat) {
+        tmp_mat_a.lookAt(monitor_root.position, camera.position, world_up)
+        tmp_quat_face_camera.setFromRotationMatrix(tmp_mat_a)
+        tmp_quat_face_camera.multiply(monitor_face_to_neg_z_quat)
+
+        // desired_offset = inverse(base_quat) * face_camera_quat
+        tmp_quat_a.copy(tmp_quat_c).invert()
+        tmp_quat_b.copy(tmp_quat_a).multiply(tmp_quat_face_camera)
+
+        const alpha = (1 - Math.exp(-talk_attention_lambda * dt_s)) * attention_amount
+        talk_camera_face_offset_quat.slerp(tmp_quat_b, alpha)
+      }
+
+      // Apply the persistent facing offset.
+      tmp_quat_c.multiply(talk_camera_face_offset_quat)
+
+      const wander_bank_z = (Math.sin(t * 0.7) * 0.06 - wander_offset.x * 0.25) * rot_scale
+      const wander_tilt_x = (Math.sin(t * 0.55 + 1.2) * 0.03 + wander_offset.z * 0.15) * rot_scale
+
+      tmp_euler_a.set(
+        idle_rot_x + wander_tilt_x + talk_rot_x,
+        idle_rot_y + talk_rot_y,
+        wander_bank_z + talk_rot_z,
+      )
+
+      // Apply additional motion offsets.
+      tmp_quat_b.setFromEuler(tmp_euler_a)
+      monitor_root.quaternion.copy(tmp_quat_c).multiply(tmp_quat_b)
+
+      // Talk-time approach: fly forward in the direction the monitor is currently facing.
+      // This makes the motion feel more natural while it is turning to face the camera.
+      const approach_active = talk_needed_active || attention_amount > 0.001
+      if (approach_active && monitor_face_forward_local) {
+        camera.getWorldDirection(tmp_camera_forward).normalize()
+        tmp_camera_approach_target.copy(camera.position).addScaledVector(tmp_camera_forward, talk_camera_approach_distance)
+
+        tmp_camera_approach_to_target.copy(tmp_camera_approach_target).sub(monitor_root.position)
+        const dist_needed = tmp_camera_approach_to_target.length()
+        if (dist_needed > 0.000001) tmp_camera_approach_to_target.multiplyScalar(1 / dist_needed)
+
+        tmp_face_forward_world.copy(monitor_face_forward_local).applyQuaternion(monitor_root.quaternion).normalize()
+
+        // Only move if we're at least somewhat facing the target.
+        const facing_dot = tmp_camera_approach_to_target.dot(tmp_face_forward_world)
+        if (dist_needed > 0.000001 && facing_dot > talk_camera_approach_min_facing_dot) {
+          // Steer slightly toward the target direction to avoid ending left/right of center.
+          const steer_amount = clamp01((1 - facing_dot) * talk_camera_approach_steer_strength) * attention_amount
+          tmp_move_dir.copy(tmp_face_forward_world).lerp(tmp_camera_approach_to_target, steer_amount).normalize()
+
+          // Ease out as we get close so it doesn't "snap" to a stop.
+          const slow_scale = smoothstep(0, talk_camera_approach_slow_distance, dist_needed)
+
+          const time_left_s = Math.max(talk_camera_approach_min_time_left_s, talk_camera_approach_end_t - t)
+          const needed_speed = Math.min(talk_camera_approach_max_speed, dist_needed / time_left_s)
+
+          const drive = talk_needed_active ? 1 : attention_amount
+          const max_step = needed_speed * drive * dt_s * slow_scale
+          const step = Math.min(dist_needed, max_step)
+
+          talk_camera_approach_offset.addScaledVector(tmp_move_dir, step)
+        }
+      }
+
+      // Apply the updated approach offset.
+      monitor_root.position.copy(tmp_base_pos).add(talk_camera_approach_offset)
+    }
+  }
+
+  // Look debug readout.
+  setLookStatus(
+    `look_rot_deg: x=${parseNumberInput(look_rot_x_deg_input).toFixed(0)} y=${parseNumberInput(look_rot_y_deg_input).toFixed(0)} z=${parseNumberInput(look_rot_z_deg_input).toFixed(0)} home_debug=${debug_home_pose ? 'on' : 'off'}`,
+  )
 
   // Rendering tuning
   renderer.toneMapping = enable_aces_input.checked ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping
@@ -1489,8 +2246,25 @@ function animate(): void {
   // With FBX MeshPhongMaterial, scene.environment won't apply. We set envMap per material instead.
   scene.environment = null
 
-  // Light tuning
-  axes_helper.visible = enable_axes_helper_input.checked
+    // Light tuning
+    const world_axes_enabled = enable_axes_helper_input.checked
+    axes_helper.visible = world_axes_enabled
+
+    grid_floor.visible = enable_grid_floor_input.checked
+
+  if (!debug_home_pose && world_axes_enabled && align_world_axes_to_model_input.checked && monitor_root) {
+    // “World axes” becomes a baseline reference aligned to the model's current orientation.
+    axes_helper.position.copy(monitor_root.position)
+    axes_helper.quaternion.copy(monitor_root.quaternion)
+  } else {
+    axes_helper.position.copy(world_axes_base_position)
+    axes_helper.quaternion.identity()
+  }
+
+  model_axes_helper.visible = enable_model_axes_helper_input.checked
+  const model_forward_visible = enable_model_forward_helper_input.checked
+  model_forward_arrow_pos.visible = model_forward_visible
+  model_forward_arrow_neg.visible = model_forward_visible
 
   const hemi_enabled = enable_hemi_light_input.checked
   hemi_light.visible = hemi_enabled
