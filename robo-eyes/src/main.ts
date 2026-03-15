@@ -118,6 +118,7 @@ let tts_playing = false
 let tts_source_node: AudioBufferSourceNode | null = null
 const audio_queue: ArrayBuffer[] = []
 let queue_playing = false
+const TTS_PLAYBACK_RATE = 1.25
 const NOISE_GATE = 0.012
 const ATTACK = 0.55
 const RELEASE = 0.12
@@ -225,6 +226,7 @@ async function play_next() {
   const buffer = await audio_ctx!.decodeAudioData(data)
   tts_source_node = audio_ctx!.createBufferSource()
   tts_source_node.buffer = buffer
+  tts_source_node.playbackRate.value = TTS_PLAYBACK_RATE
   tts_source_node.connect(analyser!)              // amplitude analysis
   tts_source_node.connect(audio_ctx!.destination)  // play through speakers
   tts_source_node.onended = () => play_next()

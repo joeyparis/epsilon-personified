@@ -7,8 +7,14 @@ if (!OPENAI_API_KEY) {
 }
 
 const WS_URL = process.env.WS_URL || 'wss://localhost:5174/ws'
-const VOICE = process.env.TTS_VOICE || 'alloy'
-const MODEL = process.env.TTS_MODEL || 'tts-1'
+const VOICE = process.env.TTS_VOICE || 'onyx'
+const MODEL = process.env.TTS_MODEL || 'gpt-4o-mini-tts'
+
+const VOICE_INSTRUCTIONS = process.env.TTS_INSTRUCTIONS ||
+  'Speak fast and clipped — rapid-fire delivery, no pauses, no lingering. ' +
+  'Voice is robotic, crackly, and distorted like a cheap radio with static. ' +
+  'Dripping with sarcasm and dry wit. Deadpan, never earnest. ' +
+  'Every sentence sounds like you can\'t believe you have to explain this.'
 
 let ws: WebSocket | null = null
 let job_id = 0
@@ -29,7 +35,7 @@ async function tts_chunk(text: string, voice: string): Promise<Buffer> {
       'Authorization': `Bearer ${OPENAI_API_KEY}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: MODEL, input: text, voice, response_format: 'mp3' }),
+    body: JSON.stringify({ model: MODEL, input: text, voice, instructions: VOICE_INSTRUCTIONS, response_format: 'mp3' }),
   })
 
   if (!res.ok) {
