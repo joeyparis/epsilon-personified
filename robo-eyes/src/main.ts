@@ -68,7 +68,7 @@ const BG_COLOR = '#000000'
 const BASE_EYE_W = 80
 const BASE_EYE_H = 80
 const EYE_GAP = 20
-const GAZE_RANGE = 30
+const GAZE_RANGE = 55
 const LERP_SPEED = 8
 
 const canvas = document.getElementById('eyes') as HTMLCanvasElement
@@ -93,7 +93,7 @@ let idle_gaze_active = true
 let idle_gaze_timer = 0
 let idle_gaze_cooldown = rand_range(2000, 5000)
 
-let curiosity_mode = true
+let curiosity_mode = false
 let ws: WebSocket | null = null
 ;(window as unknown as Record<string, unknown>).epsilon = {
   say: (text: string, voice?: string) => ws?.send(JSON.stringify({ type: 'say', text, voice })),
@@ -355,6 +355,17 @@ function render() {
 
   draw_eye(center_x - half_gap - eye_w_scaled * 0.5, center_y, left, false, scale)
   draw_eye(center_x + half_gap + eye_w_scaled * 0.5, center_y, right, true, scale)
+
+  const buf = 12 * scale
+  const gaze_px = GAZE_RANGE * scale
+  const eye_h_scaled = BASE_EYE_H * scale
+  const bounds_l = center_x - half_gap - eye_w_scaled - gaze_px - buf
+  const bounds_r = center_x + half_gap + eye_w_scaled + gaze_px + buf
+  const bounds_t = center_y - eye_h_scaled / 2 - gaze_px - buf
+  const bounds_b = center_y + eye_h_scaled / 2 + gaze_px + buf
+  ctx.strokeStyle = 'rgba(80, 220, 255, 0.30)'
+  ctx.lineWidth = 1
+  ctx.strokeRect(bounds_l, bounds_t, bounds_r - bounds_l, bounds_b - bounds_t)
 }
 
 function update() {
@@ -406,24 +417,24 @@ function update() {
   if (!blink_active && blink_timer >= blink_cooldown) {
     blink_active = true
     blink_timer = 0
-    blink_cooldown = rand_range(2500, 5500)
-    setTimeout(() => { blink_active = false }, 120)
+    blink_cooldown = rand_range(2000, 5000)
+    setTimeout(() => { blink_active = false }, 220)
   }
 
   if (idle_gaze_active && !is_talking) {
     idle_gaze_timer += dt_s * 1000
     if (idle_gaze_timer >= idle_gaze_cooldown) {
       idle_gaze_timer = 0
-      idle_gaze_cooldown = rand_range(2000, 5000)
-      if (Math.random() < 0.6) {
-        target_gaze_x = rand_range(-0.7, 0.7)
-        target_gaze_y = rand_range(-0.5, 0.5)
+      idle_gaze_cooldown = rand_range(1500, 4000)
+      if (Math.random() < 0.75) {
+        target_gaze_x = rand_range(-1, 1)
+        target_gaze_y = rand_range(-0.6, 0.6)
         setTimeout(() => {
           if (idle_gaze_active && !is_talking) {
-            target_gaze_x = 0
-            target_gaze_y = 0
+            target_gaze_x = rand_range(-0.15, 0.15)
+            target_gaze_y = rand_range(-0.1, 0.1)
           }
-        }, rand_range(600, 1500))
+        }, rand_range(800, 2500))
       }
     }
   }
