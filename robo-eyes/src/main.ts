@@ -40,7 +40,7 @@ const MOODS: Record<string, MoodDef> = {
     left:  { w: 0.85, h: 0.85, radius: 0.25, tired: 0,   angry: 0,   happy: 0 },
     right: { w: 1.15, h: 1.15, radius: 0.25, tired: 0,   angry: 0,   happy: 0 },
   },
-  blink:    sym({ w: 1.05, h: 0.02, radius: 0.5,  tired: 0,   angry: 0,   happy: 0 }),
+  blink:    sym({ w: 1.05, h: 0.008, radius: 0.5,  tired: 0,   angry: 0,   happy: 0 }),
 }
 
 type Mood = keyof typeof MOODS
@@ -87,11 +87,11 @@ let talk_phase = 0
 
 let blink_active = false
 let blink_timer = 0
-let blink_cooldown = rand_range(2500, 5000)
+let blink_cooldown = rand_range(3500, 7000)
 
 let idle_gaze_active = true
 let idle_gaze_timer = 0
-let idle_gaze_cooldown = rand_range(2000, 5000)
+let idle_gaze_cooldown = rand_range(3000, 6000)
 
 let curiosity_mode = false
 let ws: WebSocket | null = null
@@ -373,7 +373,8 @@ function update() {
   const dt_s = Math.min((now - last_time) / 1000, 0.1)
   last_time = now
 
-  const t = 1 - Math.exp(-LERP_SPEED * dt_s)
+  const speed = blink_active ? LERP_SPEED * 4 : LERP_SPEED
+  const t = 1 - Math.exp(-speed * dt_s)
 
   const mood_def = blink_active ? MOODS['blink']! : MOODS[current_mood]!
   const tl = mood_def.left
@@ -417,15 +418,15 @@ function update() {
   if (!blink_active && blink_timer >= blink_cooldown) {
     blink_active = true
     blink_timer = 0
-    blink_cooldown = rand_range(2000, 5000)
-    setTimeout(() => { blink_active = false }, 220)
+    blink_cooldown = rand_range(3500, 7000)
+    setTimeout(() => { blink_active = false }, 140)
   }
 
   if (idle_gaze_active && !is_talking) {
     idle_gaze_timer += dt_s * 1000
     if (idle_gaze_timer >= idle_gaze_cooldown) {
       idle_gaze_timer = 0
-      idle_gaze_cooldown = rand_range(1500, 4000)
+      idle_gaze_cooldown = rand_range(3000, 6000)
       if (Math.random() < 0.75) {
         target_gaze_x = rand_range(-1, 1)
         target_gaze_y = rand_range(-0.6, 0.6)
