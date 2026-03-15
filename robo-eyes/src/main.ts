@@ -121,8 +121,8 @@ let queue_playing = false
 const NOISE_GATE = 0.012
 const ATTACK = 0.55
 const RELEASE = 0.12
-const TALK_GAIN = 6
-const TALK_CURVE = 1.1
+const TALK_GAIN = 2.5
+const TALK_CURVE = 0.7
 const MIC_TALK_THRESHOLD = 0.05
 
 function rand_range(min: number, max: number): number {
@@ -447,11 +447,11 @@ function update() {
       is_talking = smoothed_amplitude > MIC_TALK_THRESHOLD
     }
     if (is_talking) {
-      const talk_scale = 1 + smoothed_amplitude * 0.15
-      left.h = Math.min(left.h * talk_scale, 1.35)
-      right.h = Math.min(right.h * talk_scale, 1.35)
-      left.w = Math.min(left.w * (1 + smoothed_amplitude * 0.04), 1.15)
-      right.w = Math.min(right.w * (1 + smoothed_amplitude * 0.04), 1.15)
+      const talk_scale = 1 + smoothed_amplitude * 0.05
+      left.h *= talk_scale
+      right.h *= talk_scale
+      left.w *= 1 + smoothed_amplitude * 0.015
+      right.w *= 1 + smoothed_amplitude * 0.015
     }
   } else if (is_talking) {
     talk_phase += dt_s * 9
