@@ -175,6 +175,7 @@ app_el.innerHTML = `
         <label><input id="enable_halo_aim" type="checkbox" checked /> Aim overlay (look variation)</label>
         <label>Idle amplitude <input id="halo_idle_amplitude" type="range" min="0" max="0.15" step="0.001" value="0.04" /></label>
         <label>Aim blend <input id="halo_aim_blend" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+        <label><input id="enable_halo_only" type="checkbox" /> Halo-only mode (disable procedural)</label>
       </div>
     </div>
 
@@ -265,6 +266,7 @@ const enable_halo_idle_input = mustGetElement<HTMLInputElement>('#enable_halo_id
 const enable_halo_aim_input = mustGetElement<HTMLInputElement>('#enable_halo_aim')
 const halo_idle_amplitude_input = mustGetElement<HTMLInputElement>('#halo_idle_amplitude')
 const halo_aim_blend_input = mustGetElement<HTMLInputElement>('#halo_aim_blend')
+const enable_halo_only_input = mustGetElement<HTMLInputElement>('#enable_halo_only')
 
 const reset_model_pose_button = mustGetElement<HTMLButtonElement>('#reset_model_pose_button')
 const model_pos_x_input = mustGetElement<HTMLInputElement>('#model_pos_x')
@@ -652,6 +654,7 @@ const tmp_quat_a = new THREE.Quaternion()
 const tmp_quat_b = new THREE.Quaternion()
 const tmp_quat_c = new THREE.Quaternion()
 const tmp_quat_face_camera = new THREE.Quaternion()
+const identity_quat = new THREE.Quaternion()
 const tmp_euler_a = new THREE.Euler()
 
 // Look rotation offset (degrees 0..360).
@@ -715,6 +718,7 @@ let halo_idle_enabled = true
 let halo_aim_enabled = true
 let idle_bob_amplitude = 0.04
 let aim_overlay_blend = 0.3
+let halo_only_mode = false
 
 type talk_motion_style = 'excited_hover' | 'spin_bursts' | 'orbit_swoop'
 
@@ -2105,6 +2109,11 @@ function animate(): void {
     talk_rot_z = clampAbs(talk_rot_z, 0.45)
   }
 
+  if (halo_only_mode) {
+    talk_offset_x = 0; talk_offset_y = 0; talk_offset_z = 0
+    talk_rot_x = 0; talk_rot_y = 0; talk_rot_z = 0
+  }
+
   const model_pos_offset_x = parseNumberInput(model_pos_x_input)
   const model_pos_offset_y = parseNumberInput(model_pos_y_input)
   const model_pos_offset_z = parseNumberInput(model_pos_z_input)
@@ -2183,16 +2192,18 @@ function animate(): void {
     // Apply base + idle + wander + talk offsets.
     if (monitor_root && monitor_root_base_position && monitor_root_base_quaternion) {
       // Keep the existing idle motion as a subtle baseline.
-      const idle_offset_y = (halo_idle_enabled && idle_bob_sampler)
+      const idle_offset_y = ((halo_only_mode || halo_idle_enabled) && idle_bob_sampler)
         ? idle_bob_sampler.sampleOffset(t) * idle_bob_amplitude
-        : Math.sin(t * 0.9) * 0.04
-      const idle_rot_y = Math.sin(t * 0.25) * 0.35 * rot_scale
-      const idle_rot_x = Math.sin(t * 0.35) * 0.06 * rot_scale
+        : halo_only_mode ? 0 : Math.sin(t * 0.9) * 0.04
+      let idle_rot_y = Math.sin(t * 0.25) * 0.35 * rot_scale
+      let idle_rot_x = Math.sin(t * 0.35) * 0.06 * rot_scale
+      if (halo_only_mode) { idle_rot_y = 0; idle_rot_x = 0 }
 
       // Companion wander.
-      const wander_x = wander_offset.x * pos_scale
-      const wander_y = wander_offset.y * pos_scale
-      const wander_z = wander_offset.z * pos_scale
+      let wander_x = wander_offset.x * pos_scale
+      let wander_y = wander_offset.y * pos_scale
+      let wander_z = wander_offset.z * pos_scale
+      if (halo_only_mode) { wander_x = 0; wander_y = 0; wander_z = 0 }
 
       // Base position (without the talk-time approach offset).
       tmp_base_pos.set(
@@ -2211,7 +2222,9 @@ function animate(): void {
 
       // While talking, update the persistent facing offset toward the camera.
       // When talking ends, we keep this offset (so we don't snap back to the original home direction).
-      if (talk_needed_active && monitor_face_to_neg_z_quat) {
+      if (halo_only_mode) {
+        talk_camera_face_offset_quat.slerp(identity_quat, 1 - Math.exp(-3.0 * dt_s))
+      } else if (talk_needed_active && monitor_face_to_neg_z_quat) {
         tmp_mat_a.lookAt(monitor_root.position, camera.position, world_up)
         tmp_quat_face_camera.setFromRotationMatrix(tmp_mat_a)
         tmp_quat_face_camera.multiply(monitor_face_to_neg_z_quat)
@@ -2231,11 +2244,12 @@ function animate(): void {
         const aim_sample = aim_overlay_sampler.sample(t)
         tmp_quat_a.copy(tmp_quat_c)
         tmp_quat_b.copy(tmp_quat_c).multiply(aim_sample.rotation)
-        tmp_quat_c.copy(tmp_quat_a).slerp(tmp_quat_b, aim_overlay_blend * attention_amount)
+        tmp_quat_c.copy(tmp_quat_a).slerp(tmp_quat_b, aim_overlay_blend * (halo_only_mode ? 1.0 : attention_amount))
       }
 
-      const wander_bank_z = (Math.sin(t * 0.7) * 0.06 - wander_offset.x * 0.25) * rot_scale
-      const wander_tilt_x = (Math.sin(t * 0.55 + 1.2) * 0.03 + wander_offset.z * 0.15) * rot_scale
+      let wander_bank_z = (Math.sin(t * 0.7) * 0.06 - wander_offset.x * 0.25) * rot_scale
+      let wander_tilt_x = (Math.sin(t * 0.55 + 1.2) * 0.03 + wander_offset.z * 0.15) * rot_scale
+      if (halo_only_mode) { wander_bank_z = 0; wander_tilt_x = 0 }
 
       tmp_euler_a.set(
         idle_rot_x + wander_tilt_x + talk_rot_x,
@@ -2249,7 +2263,10 @@ function animate(): void {
 
       // Talk-time approach: fly forward in the direction the monitor is currently facing.
       // This makes the motion feel more natural while it is turning to face the camera.
-      const approach_active = talk_needed_active || attention_amount > 0.001
+      if (halo_only_mode) {
+        talk_camera_approach_offset.multiplyScalar(Math.exp(-3.0 * dt_s))
+      }
+      const approach_active = !halo_only_mode && (talk_needed_active || attention_amount > 0.001)
       if (approach_active && monitor_face_forward_local) {
         camera.getWorldDirection(tmp_camera_forward).normalize()
         tmp_camera_approach_target.copy(camera.position).addScaledVector(tmp_camera_forward, talk_camera_approach_distance)
@@ -2296,6 +2313,7 @@ function animate(): void {
   halo_aim_enabled = enable_halo_aim_input.checked
   idle_bob_amplitude = parseNumberInput(halo_idle_amplitude_input)
   aim_overlay_blend = parseNumberInput(halo_aim_blend_input)
+  halo_only_mode = enable_halo_only_input.checked
 
   // Rendering tuning
   renderer.toneMapping = enable_aces_input.checked ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping
