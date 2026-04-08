@@ -1154,9 +1154,7 @@ function createLedEmissiveMaskFromTexture(src: THREE.Texture): THREE.Texture | n
   // Preserve tiny atlas details.
   ctx.imageSmoothingEnabled = false
 
-  // Draw scaled; this keeps CPU work bounded even if the source is very large.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ctx.drawImage(image as any, 0, 0, dst_w, dst_h)
+  ctx.drawImage(image as CanvasImageSource, 0, 0, dst_w, dst_h)
 
   const img_data = ctx.getImageData(0, 0, dst_w, dst_h)
   const src_data = img_data.data
