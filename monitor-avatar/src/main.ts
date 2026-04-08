@@ -4,6 +4,8 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js'
+import { parseJma } from './jma-parser'
+import { createIdleBobSampler, AnimationSampler } from './animation-sampler'
 
 type material_with_emissive = THREE.Material & {
   emissive?: THREE.Color
@@ -691,6 +693,13 @@ let talk_needed_was_active = false
 let materials: material_with_emissive[] = []
 let talk_targets: talk_target[] = []
 let talk_material_uuid_set = new Set<string>()
+
+let idle_bob_sampler: ReturnType<typeof createIdleBobSampler> | null = null
+let aim_overlay_sampler: AnimationSampler | null = null
+let halo_idle_enabled = true
+let halo_aim_enabled = true
+let idle_bob_amplitude = 0.04
+let aim_overlay_blend = 0.3
 
 type talk_motion_style = 'excited_hover' | 'spin_bursts' | 'orbit_swoop'
 
@@ -1682,6 +1691,27 @@ fbx_loader.load(
       `Model loaded (meshes: ${mesh_count}, materials: ${materials.length}, size: ${size.x.toFixed(2)},${size.y.toFixed(2)},${size.z.toFixed(2)}). Audio glow will animate whenever audio is playing.`,
     )
     start_button.disabled = false
+
+    fetch('/animations/idle.jmm')
+      .then(r => r.text())
+      .then(text => {
+        const anim = parseJma(text)
+        idle_bob_sampler = createIdleBobSampler(anim)
+      })
+      .catch(err => {
+        console.warn('Failed to load idle animation, using procedural fallback:', err)
+      })
+
+    fetch('/animations/aim_still_up.jmo')
+      .then(r => r.text())
+      .then(text => {
+        const anim = parseJma(text)
+        aim_overlay_sampler = new AnimationSampler(anim, 'monitor', { loop: true })
+      })
+      .catch(err => {
+        console.warn('Failed to load aim overlay, camera-facing only:', err)
+      })
+
     start_record_button.disabled = false
 
     if (should_attempt_autostart && audio_el.src) {
@@ -2140,7 +2170,9 @@ function animate(): void {
     // Apply base + idle + wander + talk offsets.
     if (monitor_root && monitor_root_base_position && monitor_root_base_quaternion) {
       // Keep the existing idle motion as a subtle baseline.
-      const idle_offset_y = Math.sin(t * 0.9) * 0.04
+      const idle_offset_y = (halo_idle_enabled && idle_bob_sampler)
+        ? idle_bob_sampler.sampleOffset(t) * idle_bob_amplitude
+        : Math.sin(t * 0.9) * 0.04
       const idle_rot_y = Math.sin(t * 0.25) * 0.35 * rot_scale
       const idle_rot_x = Math.sin(t * 0.35) * 0.06 * rot_scale
 
@@ -2181,6 +2213,13 @@ function animate(): void {
 
       // Apply the persistent facing offset.
       tmp_quat_c.multiply(talk_camera_face_offset_quat)
+
+      if (halo_aim_enabled && aim_overlay_sampler && !debug_home_pose) {
+        const aim_sample = aim_overlay_sampler.sample(t)
+        tmp_quat_a.copy(tmp_quat_c)
+        tmp_quat_b.copy(tmp_quat_c).multiply(aim_sample.rotation)
+        tmp_quat_c.copy(tmp_quat_a).slerp(tmp_quat_b, aim_overlay_blend * attention_amount)
+      }
 
       const wander_bank_z = (Math.sin(t * 0.7) * 0.06 - wander_offset.x * 0.25) * rot_scale
       const wander_tilt_x = (Math.sin(t * 0.55 + 1.2) * 0.03 + wander_offset.z * 0.15) * rot_scale
