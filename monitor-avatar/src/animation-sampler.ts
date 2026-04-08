@@ -160,6 +160,12 @@ export function createIdleBobSampler(
   }
 
   const midpoint = (minY + maxY) / 2
+  const halfRange = (maxY - minY) / 2
+
+  // Degenerate animation (all frames same Y) - return zero offset to avoid division by zero.
+  if (halfRange === 0) {
+    return { sampleOffset: () => 0 }
+  }
 
   // Create sampler
   const sampler = new AnimationSampler(animation, 'monitor', { loop: true })
@@ -167,7 +173,8 @@ export function createIdleBobSampler(
   return {
     sampleOffset(time_s: number): number {
       const sample = sampler.sample(time_s)
-      return sample.position.y - midpoint
+      // Normalize to [-1.0, +1.0] so idle_bob_amplitude directly controls visible range.
+      return (sample.position.y - midpoint) / halfRange
     },
   }
 }
