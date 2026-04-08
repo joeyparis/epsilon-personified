@@ -168,6 +168,16 @@ app_el.innerHTML = `
       </div>
     </div>
 
+    <div class="section" data-section-id="halo_anim">
+      <h2>Halo 3 animation</h2>
+      <div class="row stack">
+        <label><input id="enable_halo_idle" type="checkbox" checked /> Halo idle bob (replaces procedural)</label>
+        <label><input id="enable_halo_aim" type="checkbox" checked /> Aim overlay (look variation)</label>
+        <label>Idle amplitude <input id="halo_idle_amplitude" type="range" min="0" max="0.15" step="0.001" value="0.04" /></label>
+        <label>Aim blend <input id="halo_aim_blend" type="range" min="0" max="1" step="0.01" value="0.3" /></label>
+      </div>
+    </div>
+
     <div class="section" data-section-id="status">
       <h2>Status</h2>
       <div class="row stack">
@@ -250,6 +260,11 @@ const reset_look_rot_button = mustGetElement<HTMLButtonElement>('#reset_look_rot
 const look_rot_x_deg_input = mustGetElement<HTMLInputElement>('#look_rot_x_deg')
 const look_rot_y_deg_input = mustGetElement<HTMLInputElement>('#look_rot_y_deg')
 const look_rot_z_deg_input = mustGetElement<HTMLInputElement>('#look_rot_z_deg')
+
+const enable_halo_idle_input = mustGetElement<HTMLInputElement>('#enable_halo_idle')
+const enable_halo_aim_input = mustGetElement<HTMLInputElement>('#enable_halo_aim')
+const halo_idle_amplitude_input = mustGetElement<HTMLInputElement>('#halo_idle_amplitude')
+const halo_aim_blend_input = mustGetElement<HTMLInputElement>('#halo_aim_blend')
 
 const reset_model_pose_button = mustGetElement<HTMLButtonElement>('#reset_model_pose_button')
 const model_pos_x_input = mustGetElement<HTMLInputElement>('#model_pos_x')
@@ -2277,6 +2292,12 @@ function animate(): void {
   setLookStatus(
     `look_rot_deg: x=${parseNumberInput(look_rot_x_deg_input).toFixed(0)} y=${parseNumberInput(look_rot_y_deg_input).toFixed(0)} z=${parseNumberInput(look_rot_z_deg_input).toFixed(0)} home_debug=${debug_home_pose ? 'on' : 'off'}`,
   )
+
+  // Halo animation UI controls (read each frame so sliders take effect immediately)
+  halo_idle_enabled = enable_halo_idle_input.checked
+  halo_aim_enabled = enable_halo_aim_input.checked
+  idle_bob_amplitude = parseNumberInput(halo_idle_amplitude_input)
+  aim_overlay_blend = parseNumberInput(halo_aim_blend_input)
 
   // Rendering tuning
   renderer.toneMapping = enable_aces_input.checked ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping
