@@ -1,0 +1,11 @@
+=== T3 File Copy Verification ===
+total 16
+drwxr-xr-x  4 joey  staff   128 Apr  8 14:04 .
+drwxr-xr-x  7 joey  staff   224 Apr  8 14:04 ..
+-rw-r--r--  1 joey  staff  2058 Apr  8 14:04 aim_still_up.jmo
+-rw-r--r--  1 joey  staff  2118 Apr  8 14:04 idle.jmm
+idle.jmm first line:
+16392
+aim_still_up.jmo first line:
+16392
+Size match: PASS (2118 bytes both)

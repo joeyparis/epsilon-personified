@@ -1,0 +1,7 @@
+{
+  "result": "CACHING: WORKS",
+  "model": "anthropic/claude-opus-4-7",
+  "evidence": "opencode stats shows Cache Read: 8273.5M tokens - caching is active",
+  "decision": "PROCEED with hybrid plan - $20/mo Anthropic-metered budget is realistic",
+  "date": "2026-04-30"
+}

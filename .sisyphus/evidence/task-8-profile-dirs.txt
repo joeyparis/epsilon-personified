@@ -1,0 +1,5 @@
+PASS: premium
+PASS: glm
+PASS: kimi
+PASS: codex
+PASS: anthropic-metered

@@ -1,0 +1,10 @@
+OPENCODE_CONFIG (BROKEN) PRECEDENCE TEST - CONFIRMED BROKEN
+
+Test: cd /tmp/opencode-precedence-test/project && OPENCODE_CONFIG=/tmp/opencode-precedence-test/profile/opencode.json opencode debug config | grep model
+Result: "model": "anthropic/claude-haiku-4-5" (PROJECT MODEL WINS - OPENCODE_CONFIG lost)
+
+OPENCODE_CONFIG is NOT usable for profile switching when project configs exist.
+This confirms Metis Finding 1 from the planning session.
+Aliases MUST use OPENCODE_CONFIG_DIR, not OPENCODE_CONFIG.
+
+Date: 2026-04-30

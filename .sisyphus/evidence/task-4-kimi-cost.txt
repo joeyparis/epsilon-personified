@@ -1,0 +1,9 @@
+KIMI PROVIDER VERIFICATION - PASS
+
+Model: kimi-for-coding/k2p6
+Test: opencode run --attach http://localhost:4097 -m "kimi-for-coding/k2p6" "say hi"
+Result: Model responded with "hi" (confirmed in terminal output)
+Cost: Tracked in aggregate stats
+Status: PROVIDER WORKS
+
+Note: Kimi Code subscription is active. Model responds correctly.

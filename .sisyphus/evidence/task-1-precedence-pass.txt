@@ -1,0 +1,9 @@
+OPENCODE_CONFIG_DIR PRECEDENCE TEST - PASSED
+
+Test: cd /tmp/opencode-precedence-test/project && OPENCODE_CONFIG_DIR=/tmp/opencode-precedence-test/profile opencode debug config | grep model
+Result: "model": "anthropic/claude-sonnet-4-6" (PROFILE MODEL - WINS over project's haiku-4-5)
+
+Profile wins over project: CONFIRMED
+OPENCODE_CONFIG_DIR is the correct mechanism for profile switching.
+
+Date: 2026-04-30

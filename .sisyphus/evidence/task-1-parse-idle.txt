@@ -1,0 +1,35 @@
+=== JMA Parser Test Results ===
+Date: 2026-04-08
+Task: Create monitor-avatar/src/jma-parser.ts
+
+TEST OUTPUT:
+=== Test 1: Idle JMM ===
+version: 16392
+frame_count: 50
+frame_rate: 30
+node_count: 2
+nodes[0].name: monitor
+nodes[1].name: tendril_marker
+frames[0][0].position: [ 0, 0, 9.650198 ]
+frames[25][0].position: [ 0, 0, 9.999999 ]
+frames[0][0].rotation: [ 0, 0, 0, -1 ]
+✓ All idle assertions passed
+
+=== Test 2: Aim JMO (scientific notation) ===
+aim frames[1][0].rotation: [ 0.3826835, 1.67e-8, -0.9238795, 4.37e-8 ]
+✓ Scientific notation parsed correctly
+
+=== Test 3: Error handling ===
+✓ Empty input correctly threw: Empty JMA input
+
+✅ ALL TESTS PASSED
+
+VERIFICATION SUMMARY:
+- File created: monitor-avatar/src/jma-parser.ts
+- Exports: JmaNode, JmaTransform, JmaAnimation types + parseJma() function
+- Header parsing: ✓ (version, frame_count, frame_rate, actor_count, actor_name, node_count, checksum)
+- Node definitions: ✓ (name, firstChildIndex, nextSiblingIndex)
+- Frame data: ✓ (position[3], rotation[4] IJKW, scale)
+- Scientific notation: ✓ (1.67E-08, 4.37E-08 parsed correctly)
+- Error handling: ✓ (throws on empty input)
+- No external dependencies: ✓ (pure TypeScript)

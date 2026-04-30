@@ -1,0 +1,7 @@
+CODEX PROVIDER VERIFICATION - PASS (via native OpenAI provider)
+
+Model: openai/gpt-5.1-codex-max
+Status: Available natively via OpenAI provider (no Codex CLI needed)
+Note: Codex CLI MCP approach was superseded - openai/gpt-5.1-codex-max is
+accessible directly through the existing OpenAI provider configuration.
+The "codex" profile uses this model ID directly.

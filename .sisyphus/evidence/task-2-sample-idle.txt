@@ -1,0 +1,8 @@
+duration: 1.6666666666666667 (expected ~1.667)
+position.y at t=0: 9.650198
+position.y at t=0.833 (peak): 9.99998266
+position.y at t=1.667 (wrap): 9.650214349999999
+All quaternion magnitudes ~1.0 (slerp confirmed)
+offset at t=0: -0.17490049999999968 (should be negative)
+offset at peak: 0.1748841600000013 (should be positive)
+ALL SAMPLER TESTS PASSED

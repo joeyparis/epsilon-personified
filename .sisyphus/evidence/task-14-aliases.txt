@@ -1,0 +1,6 @@
+# opencode profile aliases (multi-profile migration)
+alias oc-premium='OPENCODE_CONFIG_DIR=~/.config/opencode/profiles/premium opencode'
+alias oc-glm='OPENCODE_CONFIG_DIR=~/.config/opencode/profiles/glm opencode'
+alias oc-kimi='OPENCODE_CONFIG_DIR=~/.config/opencode/profiles/kimi opencode'
+alias oc-codex='OPENCODE_CONFIG_DIR=~/.config/opencode/profiles/codex opencode'
+alias oc-anthropic-metered='OPENCODE_CONFIG_DIR=~/.config/opencode/profiles/anthropic-metered opencode'

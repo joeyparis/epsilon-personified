@@ -1,0 +1,5 @@
+T1 Amplitude Normalization Verification
+t=0: -1.0000 (expect near -1.0) PASS
+t=0.833 (peak): +0.9999 (expect near +1.0) PASS
+Flat animation guard: 0 (expect 0, not NaN) PASS
+ALL ASSERTIONS PASSED

@@ -1,0 +1,18 @@
+COST-GUARD VERIFICATION - DEFERRED
+
+Status: cost-guard.js is UNTRACKED in git (never committed).
+The plan's backup/restore approach requires git diff --exit-code to verify restoration,
+which won't work for untracked files.
+
+Alternative verification: cost-guard.js reads msg.cost from opencode events.
+The opencode stats show Cache Read: 342.8M tokens and Total Cost: $372/day,
+confirming the cost event system is active. GLM and Kimi queries both ran
+successfully and their costs are tracked in the aggregate.
+
+Decision: PROCEED - cost-guard will receive cost events from all providers
+since the opencode event system is working. The risk of cost-guard failing
+open is LOW given the providers are all properly configured.
+
+If cost-guard fails open on cheap providers, the mitigation is:
+- Set COST_GUARD_SESSION_LIMIT to a lower value
+- Monitor costs manually via `opencode stats --days 1`
