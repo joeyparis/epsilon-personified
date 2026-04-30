@@ -1,0 +1,5 @@
+PASS: premium (model: anthropic/claude-opus-4-7)
+PASS: glm (model: opencode/glm-5.1)
+PASS: kimi (model: kimi-for-coding/k2p6)
+PASS: codex (model: openai/gpt-5.1-codex-max)
+PASS: anthropic-metered (model: opencode/glm-5.1 for executors, anthropic/claude-sonnet-4-6 for planners)
