@@ -1617,7 +1617,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
 ### Wave 4: Iteration + GPT-5.4 Routing
 
-- [ ] 28. Apply ONE tuning pass to weakest agent in worst profile
+- [x] 28. Apply ONE tuning pass to weakest agent in worst profile
 
   **What to do**:
   - Per Task 27 scorecard, identify worst-performing agent/profile combo
@@ -1649,7 +1649,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `refactor(agent/{name}): tuning iteration 2 with {pattern}`
 
-- [ ] 29. Apply ONE tuning pass to second-weakest agent
+- [x] 29. Apply ONE tuning pass to second-weakest agent
 
   **What to do**: Same as Task 28 but for second-weakest combo from scorecard
 
@@ -1664,7 +1664,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `refactor(agent/{name}): tuning iteration 2 with {pattern}`
 
-- [ ] 30. Decide GPT-5.4 agent routing (Sisyphus produces recommendation table; user makes final call)
+- [x] 30. Decide GPT-5.4 agent routing (Sisyphus produces recommendation table; user makes final call)
 
   **What to do**:
   - 7 agents currently on `openai/gpt-5.4` need post-expiry routing decisions: build, plan, hephaestus, oracle, multimodal-looker, momus, church
@@ -1719,7 +1719,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `docs(opencode): record GPT-5.4 agent routing decisions`
 
-- [ ] 31. Update profile configs to apply GPT-5.4 routing decisions
+- [x] 31. Update profile configs to apply GPT-5.4 routing decisions
 
   **What to do**: Apply Task 30 decisions across all relevant profile configs. This is the actual file edits.
 
@@ -1747,7 +1747,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `feat(opencode): apply GPT-5.4 routing to all cheap profiles`
 
-- [ ] 32. Re-benchmark agents affected by Tasks 28-31
+- [x] 32. Re-benchmark agents affected by Tasks 28-31
 
   **What to do**: Run subset of benchmarks affected by tuning (Tasks 28-29) and routing (Tasks 30-31). Update scorecard.
 
