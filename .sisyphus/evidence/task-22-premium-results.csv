@@ -1,0 +1,5 @@
+scenario-1,PASS,57s
+scenario-2,FAIL,293s
+scenario-3,FAIL,39s
+scenario-4,PASS,46s
+scenario-5,FAIL,timeout

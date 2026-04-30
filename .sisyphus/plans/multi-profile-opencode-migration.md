@@ -1458,7 +1458,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
 ### Wave 3: Cross-Profile Benchmark Execution + Scorecard
 
-- [ ] 22. Run full benchmark on premium baseline profile
+- [x] 22. Run full benchmark on premium baseline profile
 
   **What to do**: Execute all 5 benchmark scenarios via `oc-premium`, save outputs and metrics (cost, time, pass/fail) to `~/.config/opencode/benchmark-runs/premium-{date}/`
 
@@ -1500,7 +1500,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `test(opencode): record premium baseline benchmark results`
 
-- [ ] 23. Run full benchmark on GLM profile
+- [x] 23. Run full benchmark on GLM profile
 
   **What to do**: Same pattern as Task 22 but for GLM profile. Save to `benchmark-runs/glm-{date}/`.
 
@@ -1520,7 +1520,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `test(opencode): record GLM benchmark results`
 
-- [ ] 24. Run full benchmark on Kimi profile
+- [x] 24. Run full benchmark on Kimi profile
 
   **What to do**: Same pattern, Kimi profile
 
@@ -1538,7 +1538,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `test(opencode): record Kimi benchmark results`
 
-- [ ] 25. Run full benchmark on Codex profile
+- [x] 25. Run full benchmark on Codex profile
 
   **What to do**: Same pattern, Codex profile. NOTE: Codex profile uses MCP delegation rather than native model binding (see Task 11). Sisyphus may invoke a default cheap model that delegates to Codex tools.
 
@@ -1559,7 +1559,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `test(opencode): record Codex benchmark results`
 
-- [ ] 26. Run full benchmark on anthropic-metered profile
+- [x] 26. Run full benchmark on anthropic-metered profile
 
   **What to do**: Same pattern. ALSO log cost-per-scenario to verify $20/mo budget realism with actual benchmark traffic.
 
@@ -1580,7 +1580,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `test(opencode): record anthropic-metered benchmark + cost`
 
-- [ ] 27. Compile cross-profile scorecard + identify weakest agents
+- [x] 27. Compile cross-profile scorecard + identify weakest agents
 
   **What to do**:
   - Aggregate all 25 benchmark results (5 scenarios x 5 profiles) into `~/.config/opencode/benchmark-runs/scorecard.md`
