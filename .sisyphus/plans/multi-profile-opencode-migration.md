@@ -1121,7 +1121,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `test(opencode): smoke-test all 5 profiles`
 
-- [ ] 16. Benchmark suite design (5 scenarios with concrete pass criteria)
+- [x] 16. Benchmark suite design (5 scenarios with concrete pass criteria)
 
   **What to do**:
   - Design exactly 5 benchmark scenarios per Metis directive (no more, no less)

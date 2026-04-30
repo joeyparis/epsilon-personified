@@ -27,6 +27,15 @@
       "agent": "Sisyphus-Junior",
       "category": "quick",
       "updated_at": "2026-04-30T17:42:51.489Z"
+    },
+    "todo:16": {
+      "task_key": "todo:16",
+      "task_label": "16",
+      "task_title": "Benchmark suite design (5 scenarios with concrete pass criteria)",
+      "session_id": "ses_22064eec7ffevwK1Km0snaFD8d",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-04-30T18:21:49.100Z"
     }
   }
 }

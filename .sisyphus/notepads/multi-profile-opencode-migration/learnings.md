@@ -43,3 +43,10 @@
 - Profile oh-my-openagent.json: agent model bindings using native model IDs
 - NO custom provider blocks with API keys needed (providers in auth.json)
 - Aliases use: OPENCODE_CONFIG_DIR=~/.config/opencode/profiles/{name} opencode
+
+## 2026-04-30 Task 16: Benchmark scenario suite
+
+- Benchmark scenarios live in `~/.config/opencode/benchmark-runs/scenarios/1.md` through `5.md`
+- Keep every scenario output-verifiable with shell checks against `$OUTPUT_PATH`; no human judgment in pass criteria
+- Reused real repo anchors for fidelity: `monitor-avatar/src/main.ts`, `monitor-avatar/src/animation-sampler.ts`, and `.sisyphus/plans/multi-profile-opencode-migration.md`
+- Long-context retrieval scenario works best when the expected answer is a single exact line spanning facts from different plan sections
