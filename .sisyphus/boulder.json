@@ -63,6 +63,15 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-04-30T19:03:17.284Z"
+    },
+    "todo:33": {
+      "task_key": "todo:33",
+      "task_label": "33",
+      "task_title": "Document profile precedence chain (CORRECTED per Metis findings)",
+      "session_id": "ses_2200d8de6ffe1wZn6CxzhhrrE3",
+      "agent": "Sisyphus-Junior",
+      "category": "unspecified-low",
+      "updated_at": "2026-04-30T19:54:06.271Z"
     }
   }
 }

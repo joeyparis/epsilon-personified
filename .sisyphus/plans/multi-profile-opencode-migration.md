@@ -1774,7 +1774,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
 ### Wave 5: Documentation + Rollback
 
-- [ ] 33. Document profile precedence chain (CORRECTED per Metis findings)
+- [x] 33. Document profile precedence chain (CORRECTED per Metis findings)
 
   **What to do**:
   - Write `~/.config/opencode/profiles/PRECEDENCE.md` documenting the actual load order: remote -> global -> OPENCODE_CONFIG (loses to project) -> project -> .opencode/ + OPENCODE_CONFIG_DIR -> OPENCODE_CONFIG_CONTENT
@@ -1801,7 +1801,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `docs(opencode): document corrected profile precedence chain`
 
-- [ ] 34. Document per-agent fallback recipe with cost table
+- [x] 34. Document per-agent fallback recipe with cost table
 
   **What to do**: Write `~/.config/opencode/profiles/FALLBACKS.md`:
   - Per-agent table: which providers/profiles each agent can fall back to if primary fails
@@ -1831,7 +1831,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `docs(opencode): document per-agent fallback recipe`
 
-- [ ] 35. Document Anthropic-metered budget reality (post-caching-verification)
+- [x] 35. Document Anthropic-metered budget reality (post-caching-verification)
 
   **What to do**: Write `~/.config/opencode/profiles/anthropic-metered/BUDGET.md`:
   - Reference Wave 0 Task 2 result (caching works or doesn't)
@@ -1858,7 +1858,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `docs(opencode): document anthropic-metered budget reality`
 
-- [ ] 36. Update cost-aware-delegation.md rule with cheap-model data
+- [x] 36. Update cost-aware-delegation.md rule with cheap-model data
 
   **What to do**:
   - Update `~/.config/opencode/rules/cost-aware-delegation.md` with:
