@@ -36,6 +36,33 @@
       "agent": "Sisyphus-Junior",
       "category": "deep",
       "updated_at": "2026-04-30T18:21:49.100Z"
+    },
+    "todo:17": {
+      "task_key": "todo:17",
+      "task_label": "17",
+      "task_title": "Re-author Sisyphus prompt for cheap models + benchmark",
+      "session_id": "ses_220579343ffeRe7ozEYW1JK5gK",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-04-30T18:37:54.141Z"
+    },
+    "todo:18": {
+      "task_key": "todo:18",
+      "task_label": "18",
+      "task_title": "Re-author Prometheus prompt for cheap models + benchmark",
+      "session_id": "ses_2204a9c0dffeOlZr7o3R1viYd2",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-04-30T18:51:47.865Z"
+    },
+    "todo:19": {
+      "task_key": "todo:19",
+      "task_label": "19",
+      "task_title": "Re-author Metis prompt for cheap models + benchmark",
+      "session_id": "ses_220411f5affeikUohyYkBdaWtB",
+      "agent": "Sisyphus-Junior",
+      "category": "deep",
+      "updated_at": "2026-04-30T19:03:17.284Z"
     }
   }
 }

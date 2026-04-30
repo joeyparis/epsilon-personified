@@ -1217,7 +1217,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 > Per Metis directive: For each agent, snapshot -> identify weakness -> tune ONE pattern -> benchmark on target cheap model -> iterate or commit. NEVER batch authoring across agents.
 > Each task uses category=`deep` (PREMIUM) for authoring. The QA benchmark within each task may use cheap-tier models.
 
-- [ ] 17. Re-author Sisyphus prompt for cheap models + benchmark
+- [x] 17. Re-author Sisyphus prompt for cheap models + benchmark
 
   **What to do**:
   - Read current Sisyphus prompt from `~/.config/opencode/node_modules/oh-my-opencode/dist/agents/sisyphus/`
@@ -1282,7 +1282,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
   - Files: `~/.config/opencode/profiles/glm/agents/sisyphus.md` (and kimi/, codex/ variants if applicable)
   - Pre-commit: benchmark must run (PASS or FAIL recorded)
 
-- [ ] 18. Re-author Prometheus prompt for cheap models + benchmark
+- [x] 18. Re-author Prometheus prompt for cheap models + benchmark
 
   **What to do**:
   - Same pattern as Task 17 but for Prometheus
@@ -1330,7 +1330,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `refactor(agent/prometheus): tune prompt for cheap models with output-template`
 
-- [ ] 19. Re-author Metis prompt for cheap models + benchmark
+- [x] 19. Re-author Metis prompt for cheap models + benchmark
 
   **What to do**:
   - Same sequential pattern. Metis = gap analyzer.
@@ -1384,7 +1384,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `refactor(agent/metis): tune prompt for cheap models with verification-loops`
 
-- [ ] 20. Re-author Oracle prompt for cheap models + benchmark
+- [x] 20. Re-author Oracle prompt for cheap models + benchmark
 
   **What to do**:
   - Oracle = high-IQ consultant. Weakness: cheap models lack reasoning depth Oracle assumes
@@ -1418,7 +1418,7 @@ Max Concurrent: 7 (Wave 0 and Wave 1 each have 7 parallelizable tasks)
 
   **Commit**: YES - `refactor(agent/oracle): tune prompt for cheap models with decomposition`
 
-- [ ] 21. Re-author Momus prompt for cheap models + benchmark
+- [x] 21. Re-author Momus prompt for cheap models + benchmark
 
   **What to do**:
   - Momus = critical reviewer. Weakness: nuance detection

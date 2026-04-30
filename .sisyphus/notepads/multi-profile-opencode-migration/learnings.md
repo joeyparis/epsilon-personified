@@ -50,3 +50,13 @@
 - Keep every scenario output-verifiable with shell checks against `$OUTPUT_PATH`; no human judgment in pass criteria
 - Reused real repo anchors for fidelity: `monitor-avatar/src/main.ts`, `monitor-avatar/src/animation-sampler.ts`, and `.sisyphus/plans/multi-profile-opencode-migration.md`
 - Long-context retrieval scenario works best when the expected answer is a single exact line spanning facts from different plan sections
+
+## 2026-04-30 Task 17: Sisyphus Tuning
+
+- Subagent used git worktree approach - created branch ai/NO-TICKET-20260430/cheap-sisyphus
+- Files committed to worktree, NOT to main checkout - must merge after each Wave 2 task
+- Merge command: `cd ~/.config/opencode && git merge ai/NO-TICKET-20260430/cheap-sisyphus --no-edit`
+- Tuned prompt: 957 words, decomposition+output-template patterns applied
+- Files: profiles/glm/agents/sisyphus.md, profiles/kimi/agents/sisyphus.md (identical)
+- Evidence files must be created manually in epsilon repo (subagent puts them in worktree)
+- Pattern for Wave 2 tasks: delegate -> merge worktree branch -> create evidence -> mark complete
