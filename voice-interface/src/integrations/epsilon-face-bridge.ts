@@ -7,7 +7,7 @@ interface SocketLike {
   readonly readyState: number
   send: (message: string) => void
   close?: () => void
-  addEventListener?: (type: 'open' | 'error', listener: () => void, options?: { once?: boolean }) => void
+  addEventListener?: (type: 'open' | 'error' | 'close', listener: () => void, options?: { once?: boolean }) => void
 }
 
 type SocketFactory = (url: string) => SocketLike
@@ -41,11 +41,20 @@ export function createEpsilonFaceBridge(options: EpsilonFaceBridgeOptions = {}):
   const socketFactory = options.socketFactory ?? ((url) => new WebSocket(url))
   let socket: SocketLike | null = null
   let degraded = false
+  let pendingMessage: string | null = null
+  let pendingOpenSocket: SocketLike | null = null
 
   function markDegraded(message: string, detail?: string) {
     if (degraded) return
     degraded = true
     options.onDegraded?.(message, detail)
+  }
+
+  function resetSocket(targetSocket: SocketLike) {
+    if (socket !== targetSocket) return
+    socket = null
+    pendingMessage = null
+    pendingOpenSocket = null
   }
 
   function getSocket() {
@@ -56,9 +65,14 @@ export function createEpsilonFaceBridge(options: EpsilonFaceBridgeOptions = {}):
     }
 
     try {
-      socket = socketFactory(endpoint)
-      socket.addEventListener?.('error', () => markDegraded('Epsilon Face bridge is offline.', endpoint), { once: true })
-      return socket
+      const nextSocket = socketFactory(endpoint)
+      socket = nextSocket
+      nextSocket.addEventListener?.('error', () => {
+        markDegraded('Epsilon Face bridge is offline.', endpoint)
+        resetSocket(nextSocket)
+      }, { once: true })
+      nextSocket.addEventListener?.('close', () => resetSocket(nextSocket), { once: true })
+      return nextSocket
     } catch (error) {
       markDegraded('Epsilon Face bridge is offline.', error instanceof Error ? error.message : String(error))
       return null
@@ -70,21 +84,34 @@ export function createEpsilonFaceBridge(options: EpsilonFaceBridgeOptions = {}):
     if (!targetSocket) return
 
     const message = serializeFaceStatusEvent(event)
-    const send = () => {
-      try {
-        targetSocket.send(message)
-      } catch (error) {
-        markDegraded('Epsilon Face bridge send failed.', error instanceof Error ? error.message : String(error))
-      }
-    }
 
     if (targetSocket.readyState === SOCKET_OPEN) {
-      send()
+      sendMessage(targetSocket, message)
       return
     }
 
     if (targetSocket.readyState === SOCKET_CONNECTING) {
-      targetSocket.addEventListener?.('open', send, { once: true })
+      pendingMessage = message
+      if (pendingOpenSocket === targetSocket) return
+      pendingOpenSocket = targetSocket
+      targetSocket.addEventListener?.('open', () => {
+        const messageToSend = pendingMessage
+        pendingMessage = null
+        pendingOpenSocket = null
+        if (messageToSend) sendMessage(targetSocket, messageToSend)
+      }, { once: true })
+      return
+    }
+
+    resetSocket(targetSocket)
+  }
+
+  function sendMessage(targetSocket: SocketLike, message: string) {
+    try {
+      targetSocket.send(message)
+    } catch (error) {
+      markDegraded('Epsilon Face bridge send failed.', error instanceof Error ? error.message : String(error))
+      resetSocket(targetSocket)
     }
   }
 
