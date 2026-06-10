@@ -1,7 +1,9 @@
 import './style.css'
-import { REQUIRED_APP_STATES, type StatusSnapshot } from '../shared/state.js'
+import { REQUIRED_APP_STATES, isAppState, type StatusSnapshot } from '../shared/state.js'
 import { STATE_PRESENTATION } from '../shared/presentation.js'
+import { getEpsilonVoiceApi } from './voice-api.js'
 
+const epsilonVoice = getEpsilonVoiceApi(window)
 const appRoot = document.querySelector<HTMLDivElement>('#app')
 if (!appRoot) throw new Error('Missing #app root')
 
@@ -58,10 +60,10 @@ function renderStatus(snapshot: StatusSnapshot) {
 for (const button of stateButtons) {
   button.addEventListener('click', () => {
     const state = button.dataset.state
-    if (!state) return
-    window.epsilonVoice.setState(state as Parameters<typeof window.epsilonVoice.setState>[0]).then(renderStatus)
+    if (!isAppState(state)) return
+    epsilonVoice.setState(state).then(renderStatus)
   })
 }
 
-window.epsilonVoice.onStatusUpdate(renderStatus)
-window.epsilonVoice.getStatus().then(renderStatus)
+epsilonVoice.onStatusUpdate(renderStatus)
+epsilonVoice.getStatus().then(renderStatus)

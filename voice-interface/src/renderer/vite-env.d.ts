@@ -4,6 +4,6 @@ import type { EpsilonVoiceApi } from '../shared/ipc.js'
 
 declare global {
   interface Window {
-    epsilonVoice: EpsilonVoiceApi
+    epsilonVoice?: EpsilonVoiceApi
   }
 }
