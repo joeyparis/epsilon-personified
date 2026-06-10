@@ -1,0 +1,197 @@
+:root {
+  color-scheme: dark;
+  --font-display: "Avenir Next", "Trebuchet MS", sans-serif;
+  --font-body: "Gill Sans", "Avenir Next", sans-serif;
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --color-void: oklch(9% 0.018 240);
+  --color-panel: oklch(16% 0.026 240);
+  --color-panel-soft: oklch(21% 0.03 240);
+  --color-text: oklch(91% 0.024 235);
+  --color-muted: oklch(70% 0.04 235);
+  --color-line: oklch(39% 0.045 235 / 48%);
+  --color-accent: oklch(76% 0.12 218);
+  --color-accent-soft: oklch(76% 0.12 218 / 18%);
+  --color-warn: oklch(78% 0.14 82);
+  --color-danger: oklch(67% 0.19 28);
+  --shadow-panel: 0 22px 60px oklch(3% 0.02 240 / 72%);
+  font-family: var(--font-body);
+  background: var(--color-void);
+  color: var(--color-text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 88% 14%, var(--color-accent-soft), transparent 32%),
+    linear-gradient(145deg, var(--color-void), var(--color-panel));
+}
+
+button {
+  font: inherit;
+}
+
+.shell {
+  display: grid;
+  gap: var(--space-md);
+  min-height: 100vh;
+  padding: var(--space-lg);
+  background:
+    linear-gradient(180deg, oklch(100% 0 0 / 5%), transparent 34%),
+    var(--color-panel);
+  box-shadow: var(--shadow-panel);
+}
+
+.shell__header,
+.meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.eyebrow,
+.meta span {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: var(--space-2xs) 0 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.orb {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border: 1px solid var(--color-line);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--color-panel-soft), transparent 70%);
+}
+
+.orb span {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 28px var(--color-accent);
+}
+
+.status-card {
+  display: grid;
+  gap: var(--space-xs);
+  align-content: center;
+  min-height: 150px;
+  padding: var(--space-lg);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-lg);
+  background:
+    radial-gradient(circle at 20% 0%, var(--tone-color, var(--color-accent-soft)), transparent 48%),
+    var(--color-panel-soft);
+}
+
+.status-card[data-tone="active"] {
+  --tone-color: var(--color-accent-soft);
+}
+
+.status-card[data-tone="warn"] {
+  --tone-color: color-mix(in oklch, var(--color-warn) 18%, transparent);
+}
+
+.status-card[data-tone="danger"] {
+  --tone-color: color-mix(in oklch, var(--color-danger) 18%, transparent);
+}
+
+.status-card__verb,
+.status-card__message,
+.status-card__detail {
+  margin: 0;
+}
+
+.status-card__verb {
+  color: var(--color-accent);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.status-card__message {
+  max-width: 28ch;
+  font-size: 1.08rem;
+  line-height: 1.35;
+}
+
+.status-card__detail {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.state-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.state-grid button {
+  min-height: 42px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: oklch(100% 0 0 / 4%);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.state-grid button:hover,
+.state-grid button[aria-current] {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+  transform: translateY(-1px);
+}
+
+.meta {
+  align-self: end;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--color-line);
+  color: var(--color-muted);
+  font-size: 0.8rem;
+}
+
+.meta strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .state-grid button {
+    transition: none;
+  }
+}

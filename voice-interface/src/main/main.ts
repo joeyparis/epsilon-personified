@@ -1,0 +1,117 @@
+import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, screen } from 'electron'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { AppState, isAppState } from '../shared/state.js'
+import { IPC_CHANNELS } from '../shared/ipc.js'
+import { createStatusStore } from './status-store.js'
+import { registerVoiceHotkey } from './hotkey.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+const statusStore = createStatusStore()
+let statusWindow: BrowserWindow | null = null
+let tray: Tray | null = null
+
+function createTrayIcon() {
+  const transparentPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHklEQVR4AWP4//8/AyUYTFhYGJgYqGJgYMAAAMb8AxVFy4YBAAAAAElFTkSuQmCC'
+  const image = nativeImage.createFromDataURL(transparentPng)
+  image.setTemplateImage(true)
+  return image
+}
+
+function rendererUrl() {
+  if (process.env.VITE_DEV_SERVER_URL) return process.env.VITE_DEV_SERVER_URL
+  return `file://${path.join(__dirname, '../../dist/renderer/index.html')}`
+}
+
+function placeWindowNearTray(window: BrowserWindow) {
+  if (!tray) return
+  const trayBounds = tray.getBounds()
+  const windowBounds = window.getBounds()
+  const display = screen.getDisplayNearestPoint({ x: trayBounds.x, y: trayBounds.y })
+  const x = Math.round(trayBounds.x + trayBounds.width / 2 - windowBounds.width / 2)
+  const y = process.platform === 'darwin'
+    ? Math.round(trayBounds.y + trayBounds.height + 6)
+    : Math.round(display.workArea.y + display.workArea.height - windowBounds.height - 6)
+
+  window.setPosition(x, y, false)
+}
+
+function toggleStatusWindow() {
+  if (!statusWindow) return
+  if (statusWindow.isVisible()) {
+    statusWindow.hide()
+    return
+  }
+
+  placeWindowNearTray(statusWindow)
+  statusWindow.show()
+  statusWindow.focus()
+}
+
+function createStatusWindow() {
+  const window = new BrowserWindow({
+    width: 340,
+    height: 420,
+    show: false,
+    frame: false,
+    resizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  window.on('blur', () => window.hide())
+  window.loadURL(rendererUrl())
+  return window
+}
+
+function setupIpc() {
+  ipcMain.handle(IPC_CHANNELS.GET_STATUS, () => statusStore.getSnapshot())
+  ipcMain.handle(IPC_CHANNELS.SET_STATE, (_event, state: unknown) => {
+    if (!isAppState(state)) {
+      return statusStore.setState(AppState.Error, 'Renderer requested an unknown state.', String(state))
+    }
+
+    return statusStore.setState(state, `Showing ${state} state from the status harness.`)
+  })
+}
+
+function setupTray() {
+  tray = new Tray(createTrayIcon())
+  tray.setToolTip('Epsilon Voice')
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Show Epsilon Voice', click: toggleStatusWindow },
+    { type: 'separator' },
+    { label: 'Quit', role: 'quit' },
+  ]))
+  tray.on('click', toggleStatusWindow)
+}
+
+app.whenReady().then(() => {
+  setupIpc()
+  setupTray()
+  statusWindow = createStatusWindow()
+
+  statusStore.subscribe((snapshot) => {
+    tray?.setToolTip(`Epsilon Voice: ${snapshot.state}`)
+    statusWindow?.webContents.send(IPC_CHANNELS.STATUS_UPDATED, snapshot)
+  })
+
+  registerVoiceHotkey(globalShortcut, statusStore, toggleStatusWindow)
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) statusWindow = createStatusWindow()
+  })
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+})
