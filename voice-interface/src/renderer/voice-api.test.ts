@@ -8,7 +8,9 @@ describe('getEpsilonVoiceApi', () => {
     const preloadApi: EpsilonVoiceApi = {
       getStatus: async () => ({ state: AppState.Idle, message: 'preload', updatedAt: 'now' }),
       setState: async (state) => ({ state, message: 'preload', updatedAt: 'now' }),
+      publishEvent: async (event) => event,
       onStatusUpdate: () => () => undefined,
+      onAppEvent: () => () => undefined,
     }
     const targetWindow = { epsilonVoice: preloadApi } as Window & { epsilonVoice?: EpsilonVoiceApi }
 
@@ -37,5 +39,19 @@ describe('getEpsilonVoiceApi', () => {
 
     expect(updates).toEqual([AppState.Thinking])
     await expect(api.getStatus()).resolves.toMatchObject({ state: AppState.Speaking })
+  })
+})
+
+
+describe('development event bus fallback', () => {
+  it('publishes typed app events without Electron preload', async () => {
+    const api = getEpsilonVoiceApi({} as Window & { epsilonVoice?: EpsilonVoiceApi })
+    const eventTypes: string[] = []
+
+    const unsubscribe = api.onAppEvent((event) => eventTypes.push(event.type))
+    await api.setState(AppState.Confirming)
+    unsubscribe()
+
+    expect(eventTypes).toEqual(['state.changed', 'face.status'])
   })
 })

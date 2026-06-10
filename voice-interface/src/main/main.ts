@@ -1,6 +1,9 @@
 import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, screen } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createFaceStatusEvent, createStateChangedEvent, normalizeAppEvent } from '../events/app-events.js'
+import { createLocalEventBus } from '../events/local-event-bus.js'
+import { createEpsilonFaceBridge, readFaceBridgeConfig } from '../integrations/epsilon-face-bridge.js'
 import { AppState, isAppState } from '../shared/state.js'
 import { IPC_CHANNELS } from '../shared/ipc.js'
 import { createStatusStore } from './status-store.js'
@@ -10,6 +13,11 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 const statusStore = createStatusStore()
+const eventBus = createLocalEventBus()
+const faceBridge = createEpsilonFaceBridge({
+  ...readFaceBridgeConfig(),
+  onDegraded: (message, detail) => statusStore.setState(AppState.Degraded, message, detail),
+})
 let statusWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 
@@ -82,6 +90,15 @@ function setupIpc() {
 
     return statusStore.setState(state, `Showing ${state} state from the status harness.`)
   })
+  ipcMain.handle(IPC_CHANNELS.PUBLISH_EVENT, (_event, event: unknown) => {
+    const normalized = normalizeAppEvent(event)
+    if (!normalized) {
+      statusStore.setState(AppState.Error, 'Renderer published an invalid app event.')
+      return null
+    }
+
+    return eventBus.publish(normalized)
+  })
 }
 
 function setupTray() {
@@ -100,9 +117,16 @@ app.whenReady().then(() => {
   setupTray()
   statusWindow = createStatusWindow()
 
+  eventBus.subscribe((event) => {
+    statusWindow?.webContents.send(IPC_CHANNELS.EVENT_PUBLISHED, event)
+    faceBridge.handleEvent(event)
+  })
+
   statusStore.subscribe((snapshot) => {
     tray?.setToolTip(`Epsilon Voice: ${snapshot.state}`)
     statusWindow?.webContents.send(IPC_CHANNELS.STATUS_UPDATED, snapshot)
+    eventBus.publish(createStateChangedEvent(snapshot, 'main'))
+    eventBus.publish(createFaceStatusEvent(snapshot, 'main'))
   })
 
   registerVoiceHotkey(globalShortcut, statusStore, toggleStatusWindow)
@@ -113,5 +137,6 @@ app.whenReady().then(() => {
 })
 
 app.on('will-quit', () => {
+  faceBridge.close()
   globalShortcut.unregisterAll()
 })
