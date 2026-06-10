@@ -14,5 +14,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src/main", "src/preload", "src/shared", "src/smoke"]
+  "include": ["src/context", "src/main", "src/preload", "src/shared", "src/smoke"],
+  "exclude": ["src/**/*.test.ts"]
 }
