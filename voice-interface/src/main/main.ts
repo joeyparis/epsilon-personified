@@ -8,6 +8,7 @@ import { AppState, isAppState } from '../shared/state.js'
 import { IPC_CHANNELS } from '../shared/ipc.js'
 import { createStatusStore } from './status-store.js'
 import { registerVoiceHotkey } from './hotkey.js'
+import { mintRealtimeSessionFromEnv } from './realtime-session.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -83,13 +84,18 @@ function createStatusWindow() {
 
 function setupIpc() {
   ipcMain.handle(IPC_CHANNELS.GET_STATUS, () => statusStore.getSnapshot())
-  ipcMain.handle(IPC_CHANNELS.SET_STATE, (_event, state: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.SET_STATE, (_event, state: unknown, message?: unknown, detail?: unknown) => {
     if (!isAppState(state)) {
       return statusStore.setState(AppState.Error, 'Renderer requested an unknown state.', String(state))
     }
 
-    return statusStore.setState(state, `Showing ${state} state from the status harness.`)
+    return statusStore.setState(
+      state,
+      typeof message === 'string' ? message : `Showing ${state} state from the status harness.`,
+      typeof detail === 'string' ? detail : undefined,
+    )
   })
+  ipcMain.handle(IPC_CHANNELS.REQUEST_REALTIME_SESSION, () => mintRealtimeSessionFromEnv())
   ipcMain.handle(IPC_CHANNELS.PUBLISH_EVENT, (_event, event: unknown) => {
     const normalized = normalizeAppEvent(event)
     if (!normalized) {

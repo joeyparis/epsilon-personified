@@ -9,6 +9,12 @@ describe('getEpsilonVoiceApi', () => {
       getStatus: async () => ({ state: AppState.Idle, message: 'preload', updatedAt: 'now' }),
       setState: async (state) => ({ state, message: 'preload', updatedAt: 'now' }),
       publishEvent: async (event) => event,
+      requestRealtimeSession: async () => ({
+        ok: false,
+        code: 'unavailable',
+        message: 'preload test does not mint sessions',
+        recoverable: true,
+      }),
       onStatusUpdate: () => () => undefined,
       onAppEvent: () => () => undefined,
     }
@@ -26,6 +32,18 @@ describe('getEpsilonVoiceApi', () => {
     expect(targetWindow.epsilonVoice).toBe(api)
     expect(initial.state).toBe(AppState.Idle)
     expect(initial.message).toContain('browser preview')
+  })
+
+  it('returns mock realtime session config in browser preview without secrets', async () => {
+    const api = getEpsilonVoiceApi({} as Window & { epsilonVoice?: EpsilonVoiceApi })
+
+    const result = await api.requestRealtimeSession()
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.session.mode).toBe('mock')
+      expect(result.session.sessionId).toContain('browser-preview')
+    }
   })
 
   it('notifies browser preview listeners when state changes', async () => {

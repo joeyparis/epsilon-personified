@@ -1,5 +1,6 @@
 import { createFaceStatusEvent, createStateChangedEvent, type AppEvent } from '../events/app-events.js'
 import { createLocalEventBus } from '../events/local-event-bus.js'
+import { createMockRealtimeSession } from '../realtime/mock-client.js'
 import type { EpsilonVoiceApi } from '../shared/ipc.js'
 import { AppState, createStatusSnapshot, type StatusSnapshot } from '../shared/state.js'
 
@@ -19,13 +20,14 @@ export function createDevelopmentVoiceApi(): EpsilonVoiceApi {
 
   return {
     getStatus: async () => snapshot,
-    setState: async (state) => {
-      snapshot = createStatusSnapshot(state, `Showing ${state} state from the browser preview harness.`)
+    setState: async (state, message, detail) => {
+      snapshot = createStatusSnapshot(state, message ?? `Showing ${state} state from the browser preview harness.`, detail)
       for (const listener of listeners) listener(snapshot)
       publishStatusEvents(snapshot)
       return snapshot
     },
     publishEvent: async (event: AppEvent) => eventBus.publish(event),
+    requestRealtimeSession: async () => ({ ok: true, session: createMockRealtimeSession('browser-preview-realtime-session') }),
     onStatusUpdate: (callback) => {
       listeners.add(callback)
       return () => listeners.delete(callback)

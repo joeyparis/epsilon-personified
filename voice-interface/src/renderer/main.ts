@@ -1,6 +1,9 @@
 import './style.css'
 import { REQUIRED_APP_STATES, isAppState, type StatusSnapshot } from '../shared/state.js'
 import { STATE_PRESENTATION } from '../shared/presentation.js'
+import { MockRealtimeClient, createMockRealtimeSession } from '../realtime/mock-client.js'
+import type { RealtimeSessionMintResult } from '../realtime/types.js'
+import { createPushToTalkController } from './audio/push-to-talk.js'
 import { getEpsilonVoiceApi } from './voice-api.js'
 
 const epsilonVoice = getEpsilonVoiceApi(window)
@@ -23,6 +26,17 @@ appRoot.innerHTML = `
       <p class="status-card__detail" id="state_detail"></p>
     </div>
 
+    <section class="ptt-panel" aria-label="Push to talk controls">
+      <div>
+        <p class="ptt-panel__label">Push to talk</p>
+        <p class="ptt-panel__status" id="ptt_status">Hold or toggle to start a mocked realtime turn.</p>
+      </div>
+      <div class="ptt-panel__actions">
+        <button type="button" id="ptt_hold">Hold to talk</button>
+        <button type="button" id="ptt_toggle" aria-pressed="false">Toggle talk</button>
+      </div>
+    </section>
+
     <nav class="state-grid" aria-label="Preview states">
       ${REQUIRED_APP_STATES.map((state) => `<button type="button" data-state="${state}">${STATE_PRESENTATION[state].label}</button>`).join('')}
     </nav>
@@ -40,6 +54,9 @@ const messageEl = document.querySelector<HTMLParagraphElement>('#state_message')
 const detailEl = document.querySelector<HTMLParagraphElement>('#state_detail')
 const statusCard = document.querySelector<HTMLElement>('.status-card')
 const stateButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-state]')]
+const holdButton = document.querySelector<HTMLButtonElement>('#ptt_hold')
+const toggleButton = document.querySelector<HTMLButtonElement>('#ptt_toggle')
+const pttStatusEl = document.querySelector<HTMLParagraphElement>('#ptt_status')
 
 function renderStatus(snapshot: StatusSnapshot) {
   const presentation = STATE_PRESENTATION[snapshot.state]
@@ -67,3 +84,45 @@ for (const button of stateButtons) {
 
 epsilonVoice.onStatusUpdate(renderStatus)
 epsilonVoice.getStatus().then(renderStatus)
+
+
+async function requestMockableRealtimeSession(): Promise<RealtimeSessionMintResult> {
+  const sessionResult = await epsilonVoice.requestRealtimeSession()
+  if (sessionResult.ok) return sessionResult
+  await epsilonVoice.publishEvent({
+    type: 'realtime.error',
+    payload: { code: sessionResult.code, message: sessionResult.message, recoverable: sessionResult.recoverable },
+    meta: { id: crypto.randomUUID(), createdAt: new Date().toISOString(), source: 'renderer' },
+  })
+  return { ok: true, session: createMockRealtimeSession('renderer-mock-realtime-session') }
+}
+
+const pttController = createPushToTalkController({
+  realtimeClient: new MockRealtimeClient(),
+  requestSession: requestMockableRealtimeSession,
+  publishEvent: (event) => epsilonVoice.publishEvent(event),
+  setState: (state, message, detail) => epsilonVoice.setState(state, detail ? `${message} ${detail}` : message),
+  onSnapshot: (snapshot) => {
+    if (!pttStatusEl) return
+    const ackText = snapshot.ackMs === undefined ? '' : ` Ack ${snapshot.ackMs}ms.`
+    pttStatusEl.textContent = `${snapshot.phase}${ackText}`
+    toggleButton?.setAttribute('aria-pressed', String(snapshot.phase === 'listening' && snapshot.inputMode === 'toggle'))
+  },
+})
+
+holdButton?.addEventListener('pointerdown', (event) => {
+  event.preventDefault()
+  holdButton.setPointerCapture(event.pointerId)
+  void pttController.pressStart()
+})
+holdButton?.addEventListener('pointerup', (event) => {
+  event.preventDefault()
+  if (holdButton.hasPointerCapture(event.pointerId)) holdButton.releasePointerCapture(event.pointerId)
+  void pttController.pressEnd()
+})
+holdButton?.addEventListener('pointercancel', () => {
+  void pttController.interrupt('pointer-cancelled')
+})
+toggleButton?.addEventListener('click', () => {
+  void pttController.toggle()
+})

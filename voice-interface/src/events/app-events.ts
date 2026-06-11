@@ -3,6 +3,10 @@ import { AppState, isAppState, type StatusSnapshot } from '../shared/state.js'
 export const APP_EVENT_TYPES = [
   'audio.level',
   'audio.capture-state',
+  'voice.ptt-state',
+  'voice.interrupted',
+  'realtime.turn',
+  'realtime.error',
   'state.changed',
   'manifest.updated',
   'confirmation.requested',
@@ -35,6 +39,24 @@ export type AudioEvent =
   | AppEventBase<'audio.level', { level: number; muted: boolean }>
   | AppEventBase<'audio.capture-state', { active: boolean; reason?: string }>
 
+export type VoicePttEvent =
+  | AppEventBase<'voice.ptt-state', {
+    active: boolean
+    phase: 'idle' | 'listening' | 'thinking' | 'speaking'
+    turnId?: string
+    inputMode?: 'press-and-hold' | 'toggle'
+    ackMs?: number
+  }>
+  | AppEventBase<'voice.interrupted', { previousTurnId: string; reason: string }>
+
+export type RealtimeEvent =
+  | AppEventBase<'realtime.turn', {
+    turnId: string
+    phase: 'started' | 'committed' | 'speaking' | 'completed' | 'cancelled'
+    mode: 'mock' | 'ephemeral'
+  }>
+  | AppEventBase<'realtime.error', { code: string; message: string; recoverable: boolean }>
+
 export type StateEvent = AppEventBase<'state.changed', { snapshot: StatusSnapshot }>
 
 export type ManifestEvent = AppEventBase<'manifest.updated', { manifestId: string; status: 'loaded' | 'stale' | 'missing' }>
@@ -63,6 +85,8 @@ export type FaceStatusEvent = AppEventBase<'face.status', FaceStatusPayload>
 
 export type AppEvent =
   | AudioEvent
+  | VoicePttEvent
+  | RealtimeEvent
   | StateEvent
   | ManifestEvent
   | ConfirmationEvent
