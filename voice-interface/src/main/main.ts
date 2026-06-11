@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { CapabilityGateway } from '../capabilities/gateway.js'
 import { DelegationGateway } from '../delegation/gateway.js'
 import { createFaceStatusEvent, createStateChangedEvent, normalizeAppEvent } from '../events/app-events.js'
+import { createDegradedStatus } from '../shared/degraded-mode.js'
 import type { CapabilityConfirmation, CapabilityManifest, ConfirmationInput, PrepareCapabilityRequest } from '../shared/capability-types.js'
 import { DELEGATION_DEFAULTS, type DelegationJobRequest, type DelegationRequest } from '../shared/delegation-types.js'
 import { createLocalEventBus } from '../events/local-event-bus.js'
@@ -27,10 +28,14 @@ const delegationGateway = new DelegationGateway({
 })
 const faceBridge = createEpsilonFaceBridge({
   ...readFaceBridgeConfig(),
-  onDegraded: (message, detail) => statusStore.setState(AppState.Degraded, message, detail),
+  onDegraded: (_message, detail) => {
+    const degraded = createDegradedStatus('face_bridge_unavailable', detail)
+    statusStore.setState(degraded.state, degraded.message, degraded.detail)
+  },
 })
 let statusWindow: BrowserWindow | null = null
 let tray: Tray | null = null
+let activeRealtimeSessionExpiresAtMs = 0
 
 function createTrayIcon() {
   const transparentPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHklEQVR4AWP4//8/AyUYTFhYGJgYqGJgYMAAAMb8AxVFy4YBAAAAAElFTkSuQmCC'
@@ -105,7 +110,20 @@ function setupIpc() {
       typeof detail === 'string' ? detail : undefined,
     )
   })
-  ipcMain.handle(IPC_CHANNELS.REQUEST_REALTIME_SESSION, () => mintRealtimeSessionFromEnv())
+  ipcMain.handle(IPC_CHANNELS.REQUEST_REALTIME_SESSION, async () => {
+    const nowMs = Date.now()
+    const result = await mintRealtimeSessionFromEnv({ activeSessionCount: activeRealtimeSessionExpiresAtMs > nowMs ? 1 : 0 })
+    if (result.ok) {
+      activeRealtimeSessionExpiresAtMs = Date.parse(result.session.expiresAt)
+      return result
+    }
+
+    const degraded = result.code === 'cost_cap_reached'
+      ? createDegradedStatus('cost_cap_reached', result.message)
+      : createDegradedStatus('realtime_unavailable', result.message)
+    statusStore.setState(degraded.state, degraded.message, degraded.detail)
+    return result
+  })
   ipcMain.handle(IPC_CHANNELS.PREPARE_CAPABILITY_ACTION, (_event, request: PrepareCapabilityRequest) => {
     const manifest = capabilityGateway.prepare(request)
     statusStore.setState(AppState.Confirming, manifest.human_summary, `Say or click: ${manifest.confirmation_phrase}`)

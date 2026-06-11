@@ -3,6 +3,7 @@ import { createEventMeta, type AppEvent, type AppEventMeta } from '../../events/
 import { createBrowserMicrophoneCaptureAdapter, type MicrophoneCapture, type MicrophoneCaptureAdapter } from './microphone-capture.js'
 import { createMockRealtimeSession } from '../../realtime/mock-client.js'
 import type { PushToTalkInputMode, RealtimeClient, RealtimeSessionMintResult, SafeRealtimeSession } from '../../realtime/session.js'
+import { createDegradedStatus } from '../../shared/degraded-mode.js'
 import { AppState } from '../../shared/state.js'
 
 export type PushToTalkPhase = 'idle' | 'listening' | 'thinking' | 'speaking'
@@ -173,7 +174,8 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
         meta: eventMeta(source),
       })
       transition({ phase: 'idle' })
-      setAppState(AppState.Degraded, 'Microphone capture unavailable.', error instanceof Error ? error.message : String(error))
+      const degraded = createDegradedStatus('local_mic_denied', error instanceof Error ? error.message : String(error))
+      setAppState(degraded.state, degraded.message, degraded.detail)
       return acknowledgement
     }
 
@@ -190,7 +192,10 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
       activeTurn = null
       publishCaptureState(false, 'session-unavailable')
       transition({ phase: 'idle' })
-      setAppState(AppState.Degraded, 'Realtime session unavailable.', sessionResult.message)
+      const degraded = sessionResult.code === 'cost_cap_reached'
+        ? createDegradedStatus('cost_cap_reached', sessionResult.message)
+        : createDegradedStatus('realtime_unavailable', sessionResult.message)
+      setAppState(degraded.state, degraded.message, degraded.detail)
       return acknowledgement
     }
 

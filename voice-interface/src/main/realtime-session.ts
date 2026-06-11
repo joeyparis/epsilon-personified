@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { DEFAULT_REALTIME_MODEL, DEFAULT_REALTIME_VOICE, type RealtimeSessionMintResult } from '../realtime/types.js'
+import { evaluateCloudSpend, type EstimatedCloudSpend } from '../shared/cost-guardrails.js'
+import { resolvePrivacyCostConfig, type GuardrailApproval, type PrivacyCostConfig } from '../shared/privacy-cost-config.js'
 
-const SESSION_TTL_MS = 60_000
 const REALTIME_CLIENT_SECRETS_URL = 'https://api.openai.com/v1/realtime/client_secrets'
 
 type FetchLike = (input: string, init: RequestInit) => Promise<Response>
@@ -10,6 +11,10 @@ export interface RealtimeSessionMintOptions {
   env?: NodeJS.ProcessEnv
   now?: Date
   fetchImpl?: FetchLike
+  activeSessionCount?: number
+  estimatedSpend?: EstimatedCloudSpend
+  privacyCostConfig?: Partial<PrivacyCostConfig>
+  capApproval?: GuardrailApproval
 }
 
 interface ClientSecretPayload {
@@ -25,6 +30,27 @@ export async function mintRealtimeSessionFromEnv(options: RealtimeSessionMintOpt
   const env = options.env ?? process.env
   const now = options.now ?? new Date()
   const fetchImpl: FetchLike = options.fetchImpl ?? fetch
+  const privacyCostConfig = resolvePrivacyCostConfig(options.privacyCostConfig, options.capApproval)
+  const costDecision = evaluateCloudSpend(options.estimatedSpend ?? { todayCents: 0, monthCents: 0 }, privacyCostConfig)
+
+  if (costDecision.capReached) {
+    return {
+      ok: false,
+      code: 'cost_cap_reached',
+      message: costDecision.reason,
+      recoverable: true,
+    }
+  }
+
+  if ((options.activeSessionCount ?? 0) >= privacyCostConfig.realtime.maxActiveSessions) {
+    return {
+      ok: false,
+      code: 'realtime_session_limit_reached',
+      message: `Realtime session cap reached at ${privacyCostConfig.realtime.maxActiveSessions} active session.`,
+      recoverable: true,
+    }
+  }
+
   const apiKey = env.OPENAI_API_KEY
   if (!apiKey) {
     return {
@@ -80,7 +106,7 @@ export async function mintRealtimeSessionFromEnv(options: RealtimeSessionMintOpt
         sessionId: `rt-${randomUUID()}`,
         model,
         voice,
-        expiresAt: expiresAtToIso(clientSecret.expiresAt, now),
+        expiresAt: expiresAtToIso(clientSecret.expiresAt, now, privacyCostConfig.realtime.sessionRenewalMs),
         clientSecret: clientSecret.value,
       },
     }
@@ -111,8 +137,8 @@ function extractClientSecret(value: unknown): { value: string | null; expiresAt?
   }
 }
 
-function expiresAtToIso(expiresAtSeconds: number | undefined, now: Date) {
-  if (!expiresAtSeconds) return new Date(now.getTime() + SESSION_TTL_MS).toISOString()
+function expiresAtToIso(expiresAtSeconds: number | undefined, now: Date, fallbackTtlMs: number) {
+  if (!expiresAtSeconds) return new Date(now.getTime() + fallbackTtlMs).toISOString()
   return new Date(expiresAtSeconds * 1000).toISOString()
 }
 

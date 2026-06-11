@@ -29,4 +29,28 @@ describe('realtime session minting boundary', () => {
     }
     expect(fetchImpl).toHaveBeenCalledOnce()
   })
+
+  it('enforces one active session and uses the 30 minute renewal fallback', async () => {
+    const fetchImpl = vi.fn<(input: string, init: RequestInit) => Promise<Response>>(async () => new Response(JSON.stringify({
+      value: 'ephemeral-client-token',
+    }), { status: 200 }))
+
+    const capped = await mintRealtimeSessionFromEnv({
+      env: { OPENAI_API_KEY: 'main-process-token' },
+      activeSessionCount: 1,
+      now: new Date(0),
+      fetchImpl,
+    })
+    expect(capped).toMatchObject({ ok: false, code: 'realtime_session_limit_reached' })
+    expect(fetchImpl).not.toHaveBeenCalled()
+
+    const result = await mintRealtimeSessionFromEnv({
+      env: { OPENAI_API_KEY: 'main-process-token' },
+      activeSessionCount: 0,
+      now: new Date(0),
+      fetchImpl,
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.session.expiresAt).toBe(new Date(30 * 60 * 1000).toISOString())
+  })
 })

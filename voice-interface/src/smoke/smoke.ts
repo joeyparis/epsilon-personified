@@ -3,17 +3,20 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { CapabilityGateway } from '../capabilities/gateway.js'
 import { DelegationGateway } from '../delegation/gateway.js'
+import { mintRealtimeSessionFromEnv } from '../main/realtime-session.js'
 import { MockRealtimeClient, createMockRealtimeSession } from '../realtime/mock-client.js'
 import type { RealtimeSessionMintResult } from '../realtime/types.js'
 import { createPushToTalkController, type PushToTalkClock } from '../renderer/audio/push-to-talk.js'
 import { createSilentMicrophoneCaptureAdapter } from '../renderer/audio/microphone-capture.js'
 import { REQUIRED_APP_STATES, type AppState } from '../shared/state.js'
 import { STATE_PRESENTATION } from '../shared/presentation.js'
+import { DEFAULT_PRIVACY_COST_CONFIG } from '../shared/privacy-cost-config.js'
 
 const PTT_LATENCY_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-3-ptt-latency.json'
 const CAPTURE_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-6-confirmed-capture.diff'
 const EXTERNAL_SEND_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-6-external-send-draft.txt'
 const DELEGATION_UNAVAILABLE_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-7-opencode-unavailable.txt'
+const COST_CAP_SMOKE_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-8-cost-cap-smoke.txt'
 
 function runStateSmoke() {
   let failed = false
@@ -216,6 +219,45 @@ async function runDelegationUnavailableSmoke() {
   console.log(`Evidence: ${DELEGATION_UNAVAILABLE_EVIDENCE}`)
 }
 
+async function runCostCapSmoke() {
+  const spend = {
+    todayCents: DEFAULT_PRIVACY_COST_CONFIG.cost.dailyCloudSpendCapCents,
+    monthCents: 0,
+  }
+  let spawned = 0
+  const realtime = await mintRealtimeSessionFromEnv({ estimatedSpend: spend, fetchImpl: async () => new Response('{}') })
+  const gateway = new DelegationGateway({
+    estimatedSpend: spend,
+    healthChecker: { isAvailable: async () => true },
+    processRunner: { run: () => {
+      spawned += 1
+      return { completed: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }), cancel: () => undefined }
+    } },
+  })
+  const result = await gateway.delegate({
+    parentVoiceTurnId: 'smoke-cost-cap',
+    promptSummary: 'Cost cap smoke summary only.',
+    model: 'claude-opus-4-6',
+    profile: 'premium',
+    costBudgetCents: 25,
+  })
+  const pass = !realtime.ok && realtime.code === 'cost_cap_reached' && !result.accepted && result.job.status === 'blocked_by_cost_cap' && spawned === 0
+  await writeEvidence(COST_CAP_SMOKE_EVIDENCE, [
+    'Scenario: Cost cap reached smoke',
+    `realtime_code: ${realtime.ok ? 'ok' : realtime.code}`,
+    `delegation_status: ${result.job.status}`,
+    `spawned: ${spawned}`,
+    `pass: ${pass}`,
+  ].join('\n'))
+  if (!pass) {
+    process.exitCode = 1
+    console.log('FAIL cost cap smoke')
+    return
+  }
+  console.log('PASS cost cap smoke with local/read-only degraded mode')
+  console.log(`Evidence: ${COST_CAP_SMOKE_EVIDENCE}`)
+}
+
 async function createChurchSmokeFixture(): Promise<string> {
   const churchRoot = await mkdtemp(join(tmpdir(), 'epsilon-voice-smoke-church-'))
   await mkdir(join(churchRoot, 'tasks'), { recursive: true })
@@ -248,10 +290,13 @@ if (process.argv.includes('--states')) {
   await runExternalSendDraftSmoke(readArgumentValue('--external-send') ?? '', process.argv.includes('--confirm'))
 } else if (process.argv.includes('--delegation-unavailable')) {
   await runDelegationUnavailableSmoke()
+} else if (process.argv.includes('--cost-cap')) {
+  await runCostCapSmoke()
 } else {
   console.log('Usage: npm run smoke -- --states')
   console.log('Usage: npm run smoke -- --ptt-latency --mock-realtime')
   console.log('Usage: npm run smoke -- --manifest-capture "Buy oat milk" --confirm')
   console.log('Usage: npm run smoke -- --external-send "email Alex hello" --confirm')
   console.log('Usage: npm run smoke -- --delegation-unavailable')
+  console.log('Usage: npm run smoke -- --cost-cap')
 }

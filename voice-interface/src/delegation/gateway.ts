@@ -1,5 +1,8 @@
 import { createEventMeta, type DelegationEvent } from '../events/app-events.js'
+import { evaluateCloudSpend, type EstimatedCloudSpend } from '../shared/cost-guardrails.js'
+import { createDegradedStatus } from '../shared/degraded-mode.js'
 import { AppState, type StatusSnapshot } from '../shared/state.js'
+import { DEFAULT_PRIVACY_COST_CONFIG, resolvePrivacyCostConfig, type GuardrailApproval, type PrivacyCostConfig } from '../shared/privacy-cost-config.js'
 import type {
   DelegationCancelResult,
   DelegationJobRequest,
@@ -21,6 +24,9 @@ export interface DelegationGatewayOptions {
   maxPromptSummaryChars?: number
   processRunner?: ProcessRunner
   healthChecker?: OpenCodeHealthChecker
+  estimatedSpend?: EstimatedCloudSpend
+  privacyCostConfig?: Partial<PrivacyCostConfig>
+  capApproval?: GuardrailApproval
   clock?: DelegationClock
   idFactory?: () => string
   setStatus?: (state: AppState, message: string, detail?: string) => StatusSnapshot | void
@@ -41,11 +47,8 @@ type InternalDelegationJob = DelegationJobSnapshot & {
 }
 
 const DEFAULT_ENDPOINT = 'http://localhost:4097'
-const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000
 const DEFAULT_MAX_PROMPT_SUMMARY_CHARS = 700
-const DEFAULT_MAX_TOTAL_JOBS = 2
-const DEFAULT_TOTAL_CONCURRENCY = 2
-const DEFAULT_MAX_ACTIVE_PREMIUM_JOBS = 1
+const DEFAULT_TOTAL_CONCURRENCY = DEFAULT_PRIVACY_COST_CONFIG.delegation.maxTotalJobs
 const RAW_CONTEXT_REDACTION_PLACEHOLDER = 'Raw voice context redacted. Provide a concise typed summary before delegation.'
 const PREMIUM_MODEL_HINTS = ['opus', 'sonnet', 'gpt-5', 'premium', 'pro'] as const
 const RAW_CONTEXT_HINTS = ['raw audio', 'full transcript', 'speaker:', 'user said:', 'assistant said:', 'data:audio', 'base64'] as const
@@ -59,6 +62,8 @@ export class DelegationGateway {
   private readonly maxPromptSummaryChars: number
   private readonly processRunner: ProcessRunner
   private readonly healthChecker: OpenCodeHealthChecker
+  private readonly privacyCostConfig: PrivacyCostConfig
+  private readonly estimatedSpend: EstimatedCloudSpend
   private readonly clock: DelegationClock
   private readonly idFactory: () => string
   private readonly setStatus?: (state: AppState, message: string, detail?: string) => StatusSnapshot | void
@@ -66,14 +71,24 @@ export class DelegationGateway {
   private readonly jobs = new Map<string, InternalDelegationJob>()
 
   constructor(options: DelegationGatewayOptions = {}) {
+    this.privacyCostConfig = resolvePrivacyCostConfig({
+      ...options.privacyCostConfig,
+      delegation: {
+        ...options.privacyCostConfig?.delegation,
+        maxTotalJobs: options.maxTotalJobs,
+        maxPremiumDelegatedJobs: options.maxActivePremiumJobs,
+        delegatedJobTimeoutMs: options.defaultTimeoutMs,
+      },
+    }, options.capApproval)
     this.endpoint = validateLocalOpenCodeEndpoint(options.endpoint ?? DEFAULT_ENDPOINT)
-    this.totalConcurrency = Math.max(1, options.totalConcurrency ?? DEFAULT_TOTAL_CONCURRENCY)
-    this.maxTotalJobs = Math.max(1, Math.min(options.maxTotalJobs ?? DEFAULT_MAX_TOTAL_JOBS, DEFAULT_MAX_TOTAL_JOBS))
-    this.maxActivePremiumJobs = Math.max(0, Math.min(options.maxActivePremiumJobs ?? DEFAULT_MAX_ACTIVE_PREMIUM_JOBS, DEFAULT_MAX_ACTIVE_PREMIUM_JOBS))
-    this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS
+    this.totalConcurrency = Math.max(1, Math.min(options.totalConcurrency ?? DEFAULT_TOTAL_CONCURRENCY, DEFAULT_TOTAL_CONCURRENCY))
+    this.maxTotalJobs = Math.max(1, this.privacyCostConfig.delegation.maxTotalJobs)
+    this.maxActivePremiumJobs = Math.max(0, this.privacyCostConfig.delegation.maxPremiumDelegatedJobs)
+    this.defaultTimeoutMs = this.privacyCostConfig.delegation.delegatedJobTimeoutMs
     this.maxPromptSummaryChars = options.maxPromptSummaryChars ?? DEFAULT_MAX_PROMPT_SUMMARY_CHARS
     this.processRunner = options.processRunner ?? nodeProcessRunner
     this.healthChecker = options.healthChecker ?? fetchOpenCodeHealthChecker
+    this.estimatedSpend = options.estimatedSpend ?? { todayCents: 0, monthCents: 0 }
     this.clock = options.clock ?? realClock
     this.idFactory = options.idFactory ?? (() => crypto.randomUUID())
     this.setStatus = options.setStatus
@@ -83,18 +98,21 @@ export class DelegationGateway {
   async delegate(request: DelegationJobRequest): Promise<DelegationSubmitResult> {
     const profile = request.profile ?? inferModelProfile(request.model)
     const job = this.createJob(request, profile)
+    const costDecision = evaluateCloudSpend(this.estimatedSpend, this.privacyCostConfig)
 
-    if (request.costBudgetCents <= 0 || this.activeAndQueuedJobs().length >= this.maxTotalJobs) {
+    if (costDecision.capReached || request.costBudgetCents <= 0 || this.activeAndQueuedJobs().length >= this.maxTotalJobs) {
       job.status = 'blocked_by_cost_cap'
       job.completedAt = this.isoNow()
-    job.updatedAt = job.completedAt
-      job.finalSummary = request.costBudgetCents <= 0
+      job.updatedAt = job.completedAt
+      job.finalSummary = costDecision.capReached
+        ? costDecision.reason
+        : request.costBudgetCents <= 0
         ? 'Delegation blocked because the job budget is empty.'
         : `Delegation blocked because the queue is capped at ${this.maxTotalJobs} total jobs.`
       job.statusMessage = job.finalSummary
-      job.updatedAt = this.isoNow()
       this.jobs.set(job.id, job)
-      this.setStatus?.(AppState.Degraded, 'Delegation blocked by cost cap.', job.finalSummary)
+      const degraded = createDegradedStatus('cost_cap_reached', job.finalSummary)
+      this.setStatus?.(degraded.state, degraded.message, degraded.detail)
       this.emitUpdated(job)
       return { accepted: false, job: this.snapshot(job), queue: this.getQueueSnapshot() }
     }
@@ -103,13 +121,13 @@ export class DelegationGateway {
     if (!available) {
       job.status = 'degraded_unavailable'
       job.completedAt = this.isoNow()
-    job.updatedAt = job.completedAt
+      job.updatedAt = job.completedAt
       job.degradedReason = `OpenCode serve is unavailable at ${this.endpoint}.`
       job.finalSummary = 'Delegation unavailable. OpenCode serve is not reachable, so no worker process was spawned.'
       job.statusMessage = job.finalSummary
-      job.updatedAt = this.isoNow()
       this.jobs.set(job.id, job)
-      this.setStatus?.(AppState.Degraded, 'OpenCode delegation unavailable.', job.degradedReason)
+      const degraded = createDegradedStatus('opencode_unavailable', job.degradedReason)
+      this.setStatus?.(degraded.state, degraded.message, degraded.detail)
       this.emitUpdated(job)
       return { accepted: false, job: this.snapshot(job), queue: this.getQueueSnapshot() }
     }
@@ -146,8 +164,10 @@ export class DelegationGateway {
       maxTotalConcurrency: this.totalConcurrency,
       maxPremiumConcurrency: this.maxActivePremiumJobs,
       maxTotalJobs: this.maxTotalJobs,
-      degraded: jobs.some((job) => job.status === 'degraded_unavailable'),
-      degradedMessage: jobs.find((job) => job.status === 'degraded_unavailable')?.degradedReason,
+      degraded: jobs.some((job) => job.status === 'degraded_unavailable' || job.status === 'blocked_by_cost_cap'),
+      degradedMessage: jobs.find((job) => job.status === 'degraded_unavailable')?.degradedReason
+        ?? jobs.find((job) => job.status === 'blocked_by_cost_cap')?.finalSummary
+        ?? undefined,
       endpoint: this.endpoint,
     }
   }
@@ -162,7 +182,7 @@ export class DelegationGateway {
 
   private createJob(request: DelegationJobRequest, profile: DelegationModelProfile): InternalDelegationJob {
     const promptSummary = sanitizePromptSummary(request.promptSummary, this.maxPromptSummaryChars)
-    const timeoutMs = Math.max(1, request.timeoutMs ?? this.defaultTimeoutMs)
+    const timeoutMs = Math.max(1, Math.min(request.timeoutMs ?? this.defaultTimeoutMs, this.defaultTimeoutMs))
     const id = `delegation-${this.idFactory()}`
     const now = this.isoNow()
     const cancellationCommand = { kind: 'process-signal' as const, signal: 'SIGTERM' as const, reason: `cancel delegation job ${id}` }
