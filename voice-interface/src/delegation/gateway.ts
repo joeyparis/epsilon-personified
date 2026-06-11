@@ -46,6 +46,7 @@ const DEFAULT_MAX_PROMPT_SUMMARY_CHARS = 700
 const DEFAULT_MAX_TOTAL_JOBS = 2
 const DEFAULT_TOTAL_CONCURRENCY = 2
 const DEFAULT_MAX_ACTIVE_PREMIUM_JOBS = 1
+const RAW_CONTEXT_REDACTION_PLACEHOLDER = 'Raw voice context redacted. Provide a concise typed summary before delegation.'
 const PREMIUM_MODEL_HINTS = ['opus', 'sonnet', 'gpt-5', 'premium', 'pro'] as const
 const RAW_CONTEXT_HINTS = ['raw audio', 'full transcript', 'speaker:', 'user said:', 'assistant said:', 'data:audio', 'base64'] as const
 
@@ -330,7 +331,9 @@ export function sanitizePromptSummary(summary: string, maxChars = DEFAULT_MAX_PR
   const bounded = normalized.length > maxChars ? `${normalized.slice(0, maxChars - 3)}...` : normalized
   const lower = bounded.toLowerCase()
   if (RAW_CONTEXT_HINTS.some((hint) => lower.includes(hint))) {
-    return `Bounded summary with raw context redacted: ${bounded.slice(0, Math.max(0, maxChars - 43))}`.trim()
+    return RAW_CONTEXT_REDACTION_PLACEHOLDER.length > maxChars
+      ? `${RAW_CONTEXT_REDACTION_PLACEHOLDER.slice(0, maxChars - 3)}...`
+      : RAW_CONTEXT_REDACTION_PLACEHOLDER
   }
   return bounded || 'No safe delegation summary provided.'
 }
