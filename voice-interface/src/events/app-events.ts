@@ -1,4 +1,5 @@
 import { AppState, isAppState, type StatusSnapshot } from '../shared/state.js'
+import type { DelegationCancellationCommand, DelegationJobStatus, DelegationProfile } from '../shared/delegation-types.js'
 
 export const APP_EVENT_TYPES = [
   'audio.level',
@@ -66,9 +67,24 @@ export type ConfirmationEvent =
   | AppEventBase<'confirmation.resolved', { confirmationId: string; accepted: boolean }>
 
 export type DelegationEvent =
-  | AppEventBase<'delegation.started', { taskId: string; summary: string }>
-  | AppEventBase<'delegation.updated', { taskId: string; status: string }>
-  | AppEventBase<'delegation.completed', { taskId: string; outcome: 'completed' | 'failed' | 'cancelled' }>
+  | AppEventBase<'delegation.started', DelegationEventPayload>
+  | AppEventBase<'delegation.updated', DelegationEventPayload>
+  | AppEventBase<'delegation.completed', DelegationEventPayload & { outcome: 'completed' | 'failed' | 'cancelled' | 'timed_out' }>
+
+export interface DelegationEventPayload {
+  jobId: string
+  parentVoiceTurnId: string
+  promptSummary: string
+  model: string
+  profile: DelegationProfile
+  status: DelegationJobStatus
+  startTime: string | null
+  timeoutMs: number
+  costBudgetCents: number
+  cancellationCommand: DelegationCancellationCommand
+  finalSummary: string | null
+  statusMessage: string
+}
 
 export type CostEvent = AppEventBase<'cost.updated', { cents: number; label: string }>
 

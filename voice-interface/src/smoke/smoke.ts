@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { CapabilityGateway } from '../capabilities/gateway.js'
+import { DelegationGateway } from '../delegation/gateway.js'
 import { MockRealtimeClient, createMockRealtimeSession } from '../realtime/mock-client.js'
 import type { RealtimeSessionMintResult } from '../realtime/types.js'
 import { createPushToTalkController, type PushToTalkClock } from '../renderer/audio/push-to-talk.js'
@@ -12,6 +13,7 @@ import { STATE_PRESENTATION } from '../shared/presentation.js'
 const PTT_LATENCY_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-3-ptt-latency.json'
 const CAPTURE_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-6-confirmed-capture.diff'
 const EXTERNAL_SEND_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-6-external-send-draft.txt'
+const DELEGATION_UNAVAILABLE_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-7-opencode-unavailable.txt'
 
 function runStateSmoke() {
   let failed = false
@@ -179,6 +181,41 @@ async function runExternalSendDraftSmoke(intent: string, confirm: boolean) {
   console.log(`Evidence: ${EXTERNAL_SEND_EVIDENCE}`)
 }
 
+async function runDelegationUnavailableSmoke() {
+  let spawned = 0
+  const gateway = new DelegationGateway({
+    healthChecker: { isAvailable: async () => false },
+    processRunner: { run: () => {
+      spawned += 1
+      return { completed: Promise.resolve({ exitCode: 0, stdout: '', stderr: '' }), cancel: () => undefined }
+    } },
+    setStatus: () => undefined,
+  })
+  const result = await gateway.delegate({
+    parentVoiceTurnId: 'smoke-turn',
+    promptSummary: 'Bounded smoke summary only.',
+    model: 'opencode/glm-5.1',
+    profile: 'standard',
+    costBudgetCents: 25,
+  })
+  const pass = !result.accepted && spawned === 0 && result.job.status === 'degraded_unavailable' && result.queue.degraded
+  await writeEvidence(DELEGATION_UNAVAILABLE_EVIDENCE, [
+    'Scenario: OpenCode unavailable smoke',
+    `spawned: ${spawned}`,
+    `accepted: ${result.accepted}`,
+    `status: ${result.job.status}`,
+    `degraded: ${result.queue.degraded}`,
+    `summary: ${result.job.finalSummary}`,
+  ].join('\n'))
+  if (!pass) {
+    process.exitCode = 1
+    console.log('FAIL delegation unavailable smoke')
+    return
+  }
+  console.log('PASS delegation unavailable smoke without spawning OpenCode')
+  console.log(`Evidence: ${DELEGATION_UNAVAILABLE_EVIDENCE}`)
+}
+
 async function createChurchSmokeFixture(): Promise<string> {
   const churchRoot = await mkdtemp(join(tmpdir(), 'epsilon-voice-smoke-church-'))
   await mkdir(join(churchRoot, 'tasks'), { recursive: true })
@@ -209,9 +246,12 @@ if (process.argv.includes('--states')) {
   await runManifestCaptureSmoke(readArgumentValue('--manifest-capture') ?? '', process.argv.includes('--confirm'))
 } else if (process.argv.includes('--external-send')) {
   await runExternalSendDraftSmoke(readArgumentValue('--external-send') ?? '', process.argv.includes('--confirm'))
+} else if (process.argv.includes('--delegation-unavailable')) {
+  await runDelegationUnavailableSmoke()
 } else {
   console.log('Usage: npm run smoke -- --states')
   console.log('Usage: npm run smoke -- --ptt-latency --mock-realtime')
   console.log('Usage: npm run smoke -- --manifest-capture "Buy oat milk" --confirm')
   console.log('Usage: npm run smoke -- --external-send "email Alex hello" --confirm')
+  console.log('Usage: npm run smoke -- --delegation-unavailable')
 }

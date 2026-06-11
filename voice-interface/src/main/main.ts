@@ -2,8 +2,10 @@ import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, s
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CapabilityGateway } from '../capabilities/gateway.js'
+import { DelegationGateway } from '../delegation/gateway.js'
 import { createFaceStatusEvent, createStateChangedEvent, normalizeAppEvent } from '../events/app-events.js'
 import type { CapabilityConfirmation, CapabilityManifest, ConfirmationInput, PrepareCapabilityRequest } from '../shared/capability-types.js'
+import { DELEGATION_DEFAULTS, type DelegationJobRequest, type DelegationRequest } from '../shared/delegation-types.js'
 import { createLocalEventBus } from '../events/local-event-bus.js'
 import { createEpsilonFaceBridge, readFaceBridgeConfig } from '../integrations/epsilon-face-bridge.js'
 import { AppState, isAppState } from '../shared/state.js'
@@ -18,6 +20,11 @@ const __dirname = path.dirname(__filename)
 const statusStore = createStatusStore()
 const eventBus = createLocalEventBus()
 const capabilityGateway = new CapabilityGateway({ churchRoot: process.env.EPSILON_VOICE_CHURCH_ROOT ?? path.join(app.getPath('home'), 'Church') })
+const delegationGateway = new DelegationGateway({
+  endpoint: process.env.EPSILON_VOICE_OPENCODE_ENDPOINT,
+  setStatus: (state, message, detail) => statusStore.setState(state, message, detail),
+  publishEvent: (event) => { eventBus.publish(event) },
+})
 const faceBridge = createEpsilonFaceBridge({
   ...readFaceBridgeConfig(),
   onDegraded: (message, detail) => statusStore.setState(AppState.Degraded, message, detail),
@@ -133,6 +140,21 @@ function setupIpc() {
     }
     return result
   })
+  ipcMain.handle(IPC_CHANNELS.START_DELEGATION, async (_event, request: DelegationRequest) => {
+    const result = await delegationGateway.delegate({
+      parentVoiceTurnId: request.parentVoiceTurnId,
+      promptSummary: request.promptSummary,
+      model: request.model ?? DELEGATION_DEFAULTS.model,
+      profile: request.profile,
+      timeoutMs: request.timeoutMs,
+      costBudgetCents: request.costBudgetCents ?? DELEGATION_DEFAULTS.costBudgetCents,
+    })
+    return { accepted: result.accepted, job: result.job, snapshot: result.queue }
+  })
+  ipcMain.handle(IPC_CHANNELS.GET_DELEGATION_SNAPSHOT, () => delegationGateway.getQueueSnapshot())
+  ipcMain.handle(IPC_CHANNELS.DELEGATE_TO_OPENCODE, (_event, request: DelegationJobRequest) => delegationGateway.delegate(request))
+  ipcMain.handle(IPC_CHANNELS.GET_DELEGATION_QUEUE, () => delegationGateway.getQueueSnapshot())
+  ipcMain.handle(IPC_CHANNELS.CANCEL_DELEGATION_JOB, (_event, jobId: unknown) => delegationGateway.cancel(typeof jobId === 'string' ? jobId : '', 'renderer-requested cancellation'))
   ipcMain.handle(IPC_CHANNELS.PUBLISH_EVENT, (_event, event: unknown) => {
     const normalized = normalizeAppEvent(event)
     if (!normalized) {

@@ -1,7 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AppEvent } from '../events/app-events.js'
 import type { RealtimeSessionMintResult } from '../realtime/types.js'
+import type { DelegationCancelResult, DelegationJobRequest, DelegationQueueSnapshot, DelegationSubmitResult } from '../shared/delegation-types.js'
 import type { CapabilityConfirmation, CapabilityExecutionResult, CapabilityManifest, ConfirmationInput, PrepareCapabilityRequest } from '../shared/capability-types.js'
+import type { DelegationRequest, DelegationSnapshot, DelegationStartResult } from '../shared/delegation-types.js'
 import { IPC_CHANNELS, type EpsilonVoiceApi } from '../shared/ipc.js'
 import type { AppState, StatusSnapshot } from '../shared/state.js'
 
@@ -13,6 +15,11 @@ const api: EpsilonVoiceApi = {
   prepareCapabilityAction: (request: PrepareCapabilityRequest) => ipcRenderer.invoke(IPC_CHANNELS.PREPARE_CAPABILITY_ACTION, request) as Promise<CapabilityManifest>,
   confirmCapabilityManifest: (manifest: CapabilityManifest, input: ConfirmationInput) => ipcRenderer.invoke(IPC_CHANNELS.CONFIRM_CAPABILITY_MANIFEST, manifest, input) as Promise<CapabilityConfirmation>,
   executeCapabilityManifest: (manifest: CapabilityManifest, confirmation: CapabilityConfirmation) => ipcRenderer.invoke(IPC_CHANNELS.EXECUTE_CAPABILITY_MANIFEST, manifest, confirmation) as Promise<CapabilityExecutionResult>,
+  delegateToOpenCode: (request: DelegationJobRequest) => ipcRenderer.invoke(IPC_CHANNELS.DELEGATE_TO_OPENCODE, request) as Promise<DelegationSubmitResult>,
+  getDelegationQueue: () => ipcRenderer.invoke(IPC_CHANNELS.GET_DELEGATION_QUEUE) as Promise<DelegationQueueSnapshot>,
+  cancelDelegationJob: (jobId: string) => ipcRenderer.invoke(IPC_CHANNELS.CANCEL_DELEGATION_JOB, jobId) as Promise<DelegationCancelResult>,
+  startDelegation: (request: DelegationRequest) => ipcRenderer.invoke(IPC_CHANNELS.START_DELEGATION, request) as Promise<DelegationStartResult>,
+  getDelegationSnapshot: () => ipcRenderer.invoke(IPC_CHANNELS.GET_DELEGATION_SNAPSHOT) as Promise<DelegationSnapshot>,
   onStatusUpdate: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, snapshot: StatusSnapshot) => callback(snapshot)
     ipcRenderer.on(IPC_CHANNELS.STATUS_UPDATED, listener)
