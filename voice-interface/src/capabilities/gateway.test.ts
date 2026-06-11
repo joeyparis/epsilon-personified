@@ -2,7 +2,8 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { describe, expect, it } from 'vitest'
-import { CapabilityGateway, hashCapabilityManifest, isAllowedChurchTarget, type CapabilityManifest } from './gateway.js'
+import type { CapabilityManifest } from '../shared/capability-types.js'
+import { CapabilityGateway, hashCapabilityManifest, isAllowedChurchTarget } from './gateway.js'
 
 describe('CapabilityGateway', () => {
   it('prepares Church inbox capture without writing until confirmed and executed', async () => {
