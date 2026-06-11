@@ -1,4 +1,5 @@
 import './style.css'
+import type { CapabilityManifest } from '../shared/capability-types.js'
 import { REQUIRED_APP_STATES, isAppState, type StatusSnapshot } from '../shared/state.js'
 import { STATE_PRESENTATION } from '../shared/presentation.js'
 import { MockRealtimeClient, createMockRealtimeSession } from '../realtime/mock-client.js'
@@ -37,6 +38,19 @@ appRoot.innerHTML = `
       </div>
     </section>
 
+    <section class="manifest-panel" aria-label="Capability confirmation">
+      <div>
+        <p class="manifest-panel__label">Manifest gateway</p>
+        <p class="manifest-panel__status" id="manifest_status">No pending manifest.</p>
+      </div>
+      <pre id="manifest_payload">Prepared writes appear here before confirmation.</pre>
+      <div class="manifest-panel__actions">
+        <button type="button" id="manifest_prepare">Prepare sample draft</button>
+        <button type="button" id="manifest_confirm" disabled>Confirm manifest</button>
+        <button type="button" id="manifest_reject" disabled>Reject</button>
+      </div>
+    </section>
+
     <nav class="state-grid" aria-label="Preview states">
       ${REQUIRED_APP_STATES.map((state) => `<button type="button" data-state="${state}">${STATE_PRESENTATION[state].label}</button>`).join('')}
     </nav>
@@ -57,6 +71,12 @@ const stateButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-sta
 const holdButton = document.querySelector<HTMLButtonElement>('#ptt_hold')
 const toggleButton = document.querySelector<HTMLButtonElement>('#ptt_toggle')
 const pttStatusEl = document.querySelector<HTMLParagraphElement>('#ptt_status')
+const manifestStatusEl = document.querySelector<HTMLParagraphElement>('#manifest_status')
+const manifestPayloadEl = document.querySelector<HTMLPreElement>('#manifest_payload')
+const manifestPrepareButton = document.querySelector<HTMLButtonElement>('#manifest_prepare')
+const manifestConfirmButton = document.querySelector<HTMLButtonElement>('#manifest_confirm')
+const manifestRejectButton = document.querySelector<HTMLButtonElement>('#manifest_reject')
+let pendingManifest: CapabilityManifest | null = null
 
 function renderStatus(snapshot: StatusSnapshot) {
   const presentation = STATE_PRESENTATION[snapshot.state]
@@ -125,4 +145,39 @@ holdButton?.addEventListener('pointercancel', () => {
 })
 toggleButton?.addEventListener('click', () => {
   void pttController.toggle()
+})
+
+function renderManifest(manifest: CapabilityManifest | null, status: string) {
+  pendingManifest = manifest
+  if (manifestStatusEl) manifestStatusEl.textContent = status
+  if (manifestPayloadEl) {
+    manifestPayloadEl.textContent = manifest
+      ? `${manifest.human_summary}\nTarget: ${manifest.target_path}\nHash: ${manifest.hash}\nPhrase: ${manifest.confirmation_phrase}\n\n${manifest.exact_diff_or_payload}`
+      : 'Prepared writes appear here before confirmation.'
+  }
+  if (manifestConfirmButton) manifestConfirmButton.disabled = !manifest
+  if (manifestRejectButton) manifestRejectButton.disabled = !manifest
+}
+
+manifestPrepareButton?.addEventListener('click', async () => {
+  const manifest = await epsilonVoice.prepareCapabilityAction({
+    action_type: 'local_draft_upsert',
+    title: 'Browser Preview Draft',
+    body: 'Draft content prepared for confirmation preview.',
+    source_context_labels: ['renderer:manual-preview'],
+  })
+  renderManifest(manifest, 'Prepared. Nothing has been written yet.')
+})
+
+manifestConfirmButton?.addEventListener('click', async () => {
+  if (!pendingManifest) return
+  const confirmation = await epsilonVoice.confirmCapabilityManifest(pendingManifest, { method: 'click', accepted: true })
+  const result = await epsilonVoice.executeCapabilityManifest(pendingManifest, confirmation)
+  renderManifest(null, result.ok ? `Confirmed and executed locally. NOT SENT. ${result.target_path}` : `Blocked: ${result.reason}`)
+})
+
+manifestRejectButton?.addEventListener('click', async () => {
+  if (!pendingManifest) return
+  await epsilonVoice.confirmCapabilityManifest(pendingManifest, { method: 'click', accepted: false })
+  renderManifest(null, 'Rejected. No write performed.')
 })

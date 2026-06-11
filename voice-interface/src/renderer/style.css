@@ -164,6 +164,64 @@ h1 {
   background: oklch(100% 0 0 / 4%);
 }
 
+.manifest-panel {
+  display: grid;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  background: oklch(100% 0 0 / 4%);
+}
+
+.manifest-panel__label,
+.manifest-panel__status {
+  margin: 0;
+}
+
+.manifest-panel__label {
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.manifest-panel__status {
+  margin-top: var(--space-2xs);
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.manifest-panel pre {
+  max-height: 96px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.manifest-panel__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-xs);
+}
+
+.manifest-panel__actions button {
+  min-height: 38px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.manifest-panel__actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .ptt-panel__label,
 .ptt-panel__status {
   margin: 0;
@@ -244,6 +302,7 @@ h1 {
 
 @media (prefers-reduced-motion: reduce) {
   .state-grid button,
+  .manifest-panel__actions button,
   .ptt-panel__actions button {
     transition: none;
   }

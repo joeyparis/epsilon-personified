@@ -1,7 +1,9 @@
 import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, screen } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { CapabilityGateway } from '../capabilities/gateway.js'
 import { createFaceStatusEvent, createStateChangedEvent, normalizeAppEvent } from '../events/app-events.js'
+import type { CapabilityConfirmation, CapabilityManifest, ConfirmationInput, PrepareCapabilityRequest } from '../shared/capability-types.js'
 import { createLocalEventBus } from '../events/local-event-bus.js'
 import { createEpsilonFaceBridge, readFaceBridgeConfig } from '../integrations/epsilon-face-bridge.js'
 import { AppState, isAppState } from '../shared/state.js'
@@ -15,6 +17,7 @@ const __dirname = path.dirname(__filename)
 
 const statusStore = createStatusStore()
 const eventBus = createLocalEventBus()
+const capabilityGateway = new CapabilityGateway({ churchRoot: process.env.EPSILON_VOICE_CHURCH_ROOT ?? path.join(app.getPath('home'), 'Church') })
 const faceBridge = createEpsilonFaceBridge({
   ...readFaceBridgeConfig(),
   onDegraded: (message, detail) => statusStore.setState(AppState.Degraded, message, detail),
@@ -96,6 +99,40 @@ function setupIpc() {
     )
   })
   ipcMain.handle(IPC_CHANNELS.REQUEST_REALTIME_SESSION, () => mintRealtimeSessionFromEnv())
+  ipcMain.handle(IPC_CHANNELS.PREPARE_CAPABILITY_ACTION, (_event, request: PrepareCapabilityRequest) => {
+    const manifest = capabilityGateway.prepare(request)
+    statusStore.setState(AppState.Confirming, manifest.human_summary, `Say or click: ${manifest.confirmation_phrase}`)
+    eventBus.publish({
+      type: 'manifest.updated',
+      payload: { manifestId: manifest.id, status: 'loaded' },
+      meta: { id: crypto.randomUUID(), createdAt: new Date().toISOString(), source: 'main' },
+    })
+    eventBus.publish({
+      type: 'confirmation.requested',
+      payload: { confirmationId: manifest.id, summary: manifest.human_summary },
+      meta: { id: crypto.randomUUID(), createdAt: new Date().toISOString(), source: 'main' },
+    })
+    return manifest
+  })
+  ipcMain.handle(IPC_CHANNELS.CONFIRM_CAPABILITY_MANIFEST, (_event, manifest: CapabilityManifest, input: ConfirmationInput) => {
+    const confirmation = capabilityGateway.confirm(manifest, input)
+    eventBus.publish({
+      type: 'confirmation.resolved',
+      payload: { confirmationId: confirmation.manifest_id, accepted: confirmation.accepted },
+      meta: { id: crypto.randomUUID(), createdAt: new Date().toISOString(), source: 'main' },
+    })
+    if (!confirmation.accepted) statusStore.setState(AppState.Idle, 'Manifest rejected. No write performed.', confirmation.reason)
+    return confirmation
+  })
+  ipcMain.handle(IPC_CHANNELS.EXECUTE_CAPABILITY_MANIFEST, async (_event, manifest: CapabilityManifest, confirmation: CapabilityConfirmation) => {
+    const result = await capabilityGateway.execute(manifest, confirmation)
+    if (result.ok) {
+      statusStore.setState(AppState.Idle, result.not_sent ? 'Local draft or Church write completed. No external send performed.' : 'Capability action completed.', result.target_path)
+    } else {
+      statusStore.setState(AppState.Error, 'Manifest execution blocked. No write performed.', result.reason)
+    }
+    return result
+  })
   ipcMain.handle(IPC_CHANNELS.PUBLISH_EVENT, (_event, event: unknown) => {
     const normalized = normalizeAppEvent(event)
     if (!normalized) {
