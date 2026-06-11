@@ -1,5 +1,6 @@
 import { createLocalAcknowledgement, type LocalAcknowledgement } from '../../audio/local-ack.js'
 import { createEventMeta, type AppEvent, type AppEventMeta } from '../../events/app-events.js'
+import { createBrowserMicrophoneCaptureAdapter, type MicrophoneCapture, type MicrophoneCaptureAdapter } from './microphone-capture.js'
 import { createMockRealtimeSession } from '../../realtime/mock-client.js'
 import type { PushToTalkInputMode, RealtimeClient, RealtimeSessionMintResult, SafeRealtimeSession } from '../../realtime/session.js'
 import { AppState } from '../../shared/state.js'
@@ -25,6 +26,7 @@ export interface PushToTalkControllerOptions {
   setState?: (state: AppState, message: string, detail?: string) => Promise<unknown> | unknown
   onSnapshot?: (snapshot: PushToTalkSnapshot) => void
   onAcknowledgement?: (acknowledgement: LocalAcknowledgement) => void
+  microphoneCapture?: MicrophoneCaptureAdapter
   clock?: PushToTalkClock
   source?: AppEventMeta['source']
 }
@@ -35,6 +37,7 @@ interface ActiveTurn {
   phase: PushToTalkPhase
   startedAtMs: number
   session?: SafeRealtimeSession
+  capture?: MicrophoneCapture
 }
 
 const DEFAULT_MOCK_SESSION_RESULT: RealtimeSessionMintResult = {
@@ -62,6 +65,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
   const clock = options.clock ?? defaultClock()
   const source = options.source ?? 'renderer'
   const requestSession = options.requestSession ?? (async () => DEFAULT_MOCK_SESSION_RESULT)
+  const microphoneCapture = options.microphoneCapture ?? createBrowserMicrophoneCaptureAdapter()
   let activeTurn: ActiveTurn | null = null
   let lastSnapshot: PushToTalkSnapshot = { phase: 'idle' }
 
@@ -92,6 +96,11 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     })
   }
 
+  function stopCapture(turn: ActiveTurn | null) {
+    turn?.capture?.stop()
+    if (turn) turn.capture = undefined
+  }
+
   function publishCaptureState(active: boolean, reason: string) {
     publish({
       type: 'audio.capture-state',
@@ -109,6 +118,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     if (!activeTurn) return null
     const interrupted = activeTurn
     activeTurn = null
+    stopCapture(interrupted)
     await options.realtimeClient.cancelTurn(interrupted.turnId, reason)
     publishCaptureState(false, 'interrupted')
     publish({
@@ -139,8 +149,33 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     })
     options.onAcknowledgement?.(acknowledgement)
     transition({ phase: 'listening', turnId, inputMode, ackMs: acknowledgement.ackMs })
-    publishCaptureState(true, inputMode)
     setAppState(AppState.Listening, 'Listening for push-to-talk input.', `Local acknowledgement in ${acknowledgement.ackMs}ms.`)
+
+    try {
+      const capture = await microphoneCapture.start()
+      if (!activeTurn || activeTurn.turnId !== turnId) {
+        capture.stop()
+        return acknowledgement
+      }
+      activeTurn.capture = capture
+      publishCaptureState(true, inputMode)
+    } catch (error) {
+      if (activeTurn?.turnId !== turnId) return acknowledgement
+      activeTurn = null
+      publishCaptureState(false, 'capture-failed')
+      publish({
+        type: 'realtime.error',
+        payload: {
+          code: 'audio_capture_failed',
+          message: error instanceof Error ? error.message : String(error),
+          recoverable: true,
+        },
+        meta: eventMeta(source),
+      })
+      transition({ phase: 'idle' })
+      setAppState(AppState.Degraded, 'Microphone capture unavailable.', error instanceof Error ? error.message : String(error))
+      return acknowledgement
+    }
 
     const sessionResult = await requestSession()
     if (!activeTurn || activeTurn.turnId !== turnId) return acknowledgement
@@ -151,6 +186,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
         payload: { code: sessionResult.code, message: sessionResult.message, recoverable: sessionResult.recoverable },
         meta: eventMeta(source),
       })
+      stopCapture(activeTurn)
       activeTurn = null
       publishCaptureState(false, 'session-unavailable')
       transition({ phase: 'idle' })
@@ -178,6 +214,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     if (!activeTurn || activeTurn.phase !== 'listening') return null
     const turn = activeTurn
     turn.phase = 'thinking'
+    stopCapture(turn)
     publishCaptureState(false, 'finalized')
     transition({ phase: 'thinking', turnId: turn.turnId, inputMode: turn.inputMode, ackMs: lastSnapshot.ackMs })
     setAppState(AppState.Thinking, 'Realtime turn finalized.', 'Mock realtime is preparing a spoken response.')
@@ -209,6 +246,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
   async function completeSpeaking() {
     if (!activeTurn || activeTurn.phase !== 'speaking') return
     const completedTurn = activeTurn
+    stopCapture(completedTurn)
     activeTurn = null
     transition({ phase: 'idle' })
     setAppState(AppState.Idle, 'Epsilon voice shell is ready.')
@@ -225,6 +263,11 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     toggle,
     interrupt: interruptActiveTurn,
     completeSpeaking,
+    dispose: () => {
+      const turn = activeTurn
+      activeTurn = null
+      stopCapture(turn)
+    },
     getSnapshot: () => lastSnapshot,
   }
 }

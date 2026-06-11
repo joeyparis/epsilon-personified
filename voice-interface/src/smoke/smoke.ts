@@ -3,6 +3,7 @@ import { dirname } from 'node:path'
 import { MockRealtimeClient, createMockRealtimeSession } from '../realtime/mock-client.js'
 import type { RealtimeSessionMintResult } from '../realtime/types.js'
 import { createPushToTalkController, type PushToTalkClock } from '../renderer/audio/push-to-talk.js'
+import { createSilentMicrophoneCaptureAdapter } from '../renderer/audio/microphone-capture.js'
 import { REQUIRED_APP_STATES, type AppState } from '../shared/state.js'
 import { STATE_PRESENTATION } from '../shared/presentation.js'
 
@@ -53,6 +54,7 @@ async function runPttLatencySmoke() {
   const controller = createPushToTalkController({
     realtimeClient,
     requestSession: async () => mockSessionResult(),
+    microphoneCapture: createSilentMicrophoneCaptureAdapter(),
     clock: createSmokeClock(),
     setState: (state) => states.push(state),
     publishEvent: (event) => eventTypes.push(event.type),
