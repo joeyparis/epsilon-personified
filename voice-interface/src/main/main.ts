@@ -13,6 +13,7 @@ import { AppState, isAppState } from '../shared/state.js'
 import { IPC_CHANNELS } from '../shared/ipc.js'
 import { createStatusStore } from './status-store.js'
 import { registerVoiceHotkey } from './hotkey.js'
+import { triggerPushToTalkHotkey } from './ptt-hotkey.js'
 import { mintRealtimeSessionFromEnv } from './realtime-session.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -212,7 +213,12 @@ app.whenReady().then(() => {
     eventBus.publish(createFaceStatusEvent(snapshot, 'main'))
   })
 
-  registerVoiceHotkey(globalShortcut, statusStore, toggleStatusWindow)
+  registerVoiceHotkey(globalShortcut, statusStore, () => {
+    triggerPushToTalkHotkey(statusWindow, (window) => {
+      placeWindowNearTray(window)
+      window.show()
+    })
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) statusWindow = createStatusWindow()

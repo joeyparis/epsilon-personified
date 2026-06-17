@@ -4,6 +4,28 @@ import { createStatusStore } from './status-store.js'
 import { registerVoiceHotkey, type GlobalShortcutLike } from './hotkey.js'
 
 describe('registerVoiceHotkey', () => {
+  it('registers the supplied press handler for the global voice shortcut', () => {
+    const statusStore = createStatusStore()
+    let registeredCallback: (() => void) | undefined
+    let pressCount = 0
+    const shortcut: GlobalShortcutLike = {
+      register: (_accelerator, callback) => {
+        registeredCallback = callback
+        return true
+      },
+      unregisterAll: () => undefined,
+    }
+
+    const result = registerVoiceHotkey(shortcut, statusStore, () => {
+      pressCount += 1
+    })
+    registeredCallback?.()
+
+    expect(result.registered).toBe(true)
+    expect(result.snapshot.state).toBe(AppState.Idle)
+    expect(pressCount).toBe(1)
+  })
+
   it('enters degraded state with an actionable message when registration returns false', () => {
     const statusStore = createStatusStore()
     const shortcut: GlobalShortcutLike = {
