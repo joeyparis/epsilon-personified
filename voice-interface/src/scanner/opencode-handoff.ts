@@ -20,11 +20,10 @@ export interface ScannerOpenCodeHandoffResult {
   result?: DelegationSubmitResult
 }
 
-export const DEFAULT_SCANNER_HANDOFF_MODEL = 'opencode/glm-5.1'
-const DEFAULT_SCANNER_HANDOFF_TIMEOUT_MS = 5 * 60 * 1000
-const DEFAULT_SCANNER_HANDOFF_COST_CENTS = 25
-const DEFAULT_MAX_PROMPT_CHARS = 1800
-const RAW_UNAVAILABLE_SENTENCE = 'Raw document text is unavailable unless a later extractor policy allows it.'
+export const DEFAULT_SCANNER_HANDOFF_MODEL = 'opencode/gpt-5.5'
+const DEFAULT_SCANNER_HANDOFF_TIMEOUT_MS = 10 * 60 * 1000
+const DEFAULT_SCANNER_HANDOFF_COST_CENTS = 75
+const DEFAULT_MAX_PROMPT_CHARS = 2600
 
 export async function handoffScannerResultToOpenCode(
   process_result: ScannerMessageProcessResult,
@@ -34,6 +33,7 @@ export async function handoffScannerResultToOpenCode(
   const request: DelegationJobRequest = {
     parentVoiceTurnId: `scanner:${process_result.trigger.contextRefs[0] ?? process_result.trigger.receivedAt}`,
     promptSummary: prompt_summary,
+    promptMode: 'direct',
     model: options.model ?? DEFAULT_SCANNER_HANDOFF_MODEL,
     profile: 'standard',
     timeoutMs: options.timeoutMs ?? DEFAULT_SCANNER_HANDOFF_TIMEOUT_MS,
@@ -45,15 +45,24 @@ export async function handoffScannerResultToOpenCode(
 
 export function buildScannerOpenCodePrompt(process_result: ScannerMessageProcessResult, max_chars = DEFAULT_MAX_PROMPT_CHARS): string {
   const lines = [
-    'MOI scanner intake event matched deterministic RICOH criteria.',
-    RAW_UNAVAILABLE_SENTENCE,
-    'Use only the safe metadata below. Do not ask for raw email bodies, attachment bodies, OCR text, base64 payloads, secrets, Gmail mutations, or remote model calls.',
+    '/church Analyze and organize the scanned document(s) for Joey.',
+    '',
+    'Open the local document file path(s) listed below. For each document:',
+    '- identify what kind of document it is and the important details;',
+    '- organize it into the right Church area/project or note where it belongs;',
+    '- list action items, owners, and due dates if they are present or obvious;',
+    '- list questions Joey needs to answer if anything is ambiguous;',
+    '- use Church normal safeguards for any proposed write or task update.',
+    '',
+    'Do not mutate Gmail. Do not send email. Do not expose secrets. If a document cannot be read, say what capability is missing and what Joey should do next.',
     `Gmail context refs: ${safeJoin(process_result.trigger.contextRefs)}`,
     `Sender: ${safeField(process_result.trigger.actor)}`,
     `Subject: ${safeField(process_result.trigger.subject)}`,
   ]
 
   for (const attachment_result of process_result.attachments) {
+    lines.push('')
+    lines.push(`Document local path: ${safeField(attachment_result.attachment.localPath ?? 'missing_downloaded_file')}`)
     lines.push(`Attachment filename: ${safeField(attachment_result.attachment.filename)}`)
     lines.push(`Attachment MIME type: ${safeField(attachment_result.attachment.mimeType)}`)
     lines.push(`Attachment size bytes: ${attachment_result.attachment.sizeBytes}`)
@@ -61,7 +70,7 @@ export function buildScannerOpenCodePrompt(process_result: ScannerMessageProcess
     lines.push(`Extraction status: ${safeField(attachment_result.extraction?.status ?? 'duplicate_skip')}`)
     lines.push(`Classification: ${safeField(attachment_result.classification?.label ?? 'not_reprocessed')}`)
     lines.push(`Confidence: ${attachment_result.classification?.confidence ?? 'not_reprocessed'}`)
-    lines.push(`Unresolved questions: ${safeJoin(attachment_result.classification?.unresolvedQuestions ?? [])}`)
+    lines.push(`Scanner questions: ${safeJoin(attachment_result.classification?.unresolvedQuestions ?? [])}`)
   }
 
   const prompt = lines.join('\n')
@@ -71,7 +80,7 @@ export function buildScannerOpenCodePrompt(process_result: ScannerMessageProcess
 function safeField(value: string): string {
   const redacted_value = redactForLog(value)
   const string_value = typeof redacted_value === 'string' ? redacted_value : String(redacted_value)
-  return string_value.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240)
+  return string_value.replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 320)
 }
 
 function safeJoin(values: string[]): string {

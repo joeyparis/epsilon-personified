@@ -12,21 +12,23 @@ const FORBIDDEN_VALUES = [
 ]
 
 describe('scanner OpenCode handoff', () => {
-  it('builds a bounded safe metadata prompt without raw scanner content or secrets', () => {
+  it('builds a Church prompt with downloaded document paths and no raw scanner content or secrets', () => {
     const prompt = buildScannerOpenCodePrompt(createProcessResult())
 
-    expect(prompt).toContain('Raw document text is unavailable unless a later extractor policy allows it.')
+    expect(prompt).toContain('/church Analyze and organize the scanned document(s) for Joey.')
+    expect(prompt).toContain('Open the local document file path(s) listed below.')
+    expect(prompt).toContain('list action items, owners, and due dates')
+    expect(prompt).toContain('list questions Joey needs to answer')
+    expect(prompt).toContain('Document local path: /Users/joey/Library/Application Support/Epsilon/scanner-intake/attachments/gmail-1-attach-1-scan.pdf')
     expect(prompt).toContain('gmail:message:gmail-1')
     expect(prompt).toContain('scanner@ricoh.local')
     expect(prompt).toContain('RICOH scan invoice')
     expect(prompt).toContain('scan-[REDACTED].pdf')
     expect(prompt).toContain('application/pdf')
-    expect(prompt).toContain('needs_ocr')
-    expect(prompt).toContain('scan_document')
     for (const forbidden_value of FORBIDDEN_VALUES) expect(prompt).not.toContain(forbidden_value)
   })
 
-  it('submits the safe prompt through the narrow DelegationGateway interface', async () => {
+  it('submits the Church prompt through direct DelegationGateway mode', async () => {
     const requests: DelegationJobRequest[] = []
     const gateway: ScannerDelegationGateway = {
       delegate: async (request) => {
@@ -41,6 +43,9 @@ describe('scanner OpenCode handoff', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]?.model).toBe('local-standard')
     expect(requests[0]?.costBudgetCents).toBe(5)
+    expect(requests[0]?.promptMode).toBe('direct')
+    expect(requests[0]?.promptSummary).toContain('/church')
+    expect(requests[0]?.promptSummary).toContain('Document local path:')
     for (const forbidden_value of FORBIDDEN_VALUES) expect(requests[0]?.promptSummary).not.toContain(forbidden_value)
   })
 })
@@ -54,12 +59,12 @@ function createProcessResult(): ScannerMessageProcessResult {
       actor: 'scanner@ricoh.local Bearer sk-live-secret-value',
       subject: 'RICOH scan invoice sk-live-secret-value',
       contextRefs: ['gmail:message:gmail-1', 'gmail:thread:thread-1'],
-      attachments: [{ id: 'attach-1', filename: 'scan-sk-live-secret-value.pdf', mimeType: 'application/pdf', sizeBytes: 123, contentHash: 'hash-safe' }],
+      attachments: [{ id: 'attach-1', filename: 'scan-sk-live-secret-value.pdf', mimeType: 'application/pdf', sizeBytes: 123, contentHash: 'hash-safe', localPath: '/Users/joey/Library/Application Support/Epsilon/scanner-intake/attachments/gmail-1-attach-1-scan.pdf' }],
     },
     attachments: [{
       status: 'processed',
       idempotencyKey: 'key-1',
-      attachment: { id: 'attach-1', filename: 'scan-sk-live-secret-value.pdf', mimeType: 'application/pdf', sizeBytes: 123, contentHash: 'hash-safe' },
+      attachment: { id: 'attach-1', filename: 'scan-sk-live-secret-value.pdf', mimeType: 'application/pdf', sizeBytes: 123, contentHash: 'hash-safe', localPath: '/Users/joey/Library/Application Support/Epsilon/scanner-intake/attachments/gmail-1-attach-1-scan.pdf' },
       extraction: { status: 'needs_ocr', text: 'PRIVATE_ATTACHMENT_TEXT_SHOULD_NOT_APPEAR PRIVATE_OCR_TEXT_SHOULD_NOT_APPEAR U0VDUkVUX0JBU0U2NA== sk-live-secret-value', extractorVersion: 'builtin-needs-ocr.v1' },
       classification: { label: 'scan_document', confidence: 0.42, summary: 'safe summary', needsClarification: true, unresolvedQuestions: ['OCR is needed before Epsilon can read this scan. Secret sk-live-secret-value should not appear. What should be done with the document?'] },
     }],
@@ -71,6 +76,7 @@ function createJob(request: DelegationJobRequest): DelegationSubmitResult['job']
     id: 'delegation-1',
     parentVoiceTurnId: request.parentVoiceTurnId,
     promptSummary: request.promptSummary,
+    promptMode: request.promptMode,
     model: request.model,
     profile: request.profile ?? 'standard',
     status: 'queued',

@@ -30,6 +30,7 @@ export interface ScannerIntakeServiceConfig {
   gmailScope: string
   targetLabel: string
   gmailQuery: string
+  attachmentDownloadDir: string
   gcloudCommand: string[]
 }
 
@@ -45,6 +46,7 @@ const exec_file = promisify(execFile)
 const DEFAULT_STATE_PATH = join(homedir(), 'Library/Application Support/Epsilon/scanner-intake/state.json')
 const DEFAULT_LOG_PATH = join(homedir(), 'Library/Logs/epsilon-scanner-intake.log')
 const DEFAULT_ERROR_LOG_PATH = join(homedir(), 'Library/Logs/epsilon-scanner-intake-error.log')
+const DEFAULT_ATTACHMENT_DOWNLOAD_DIR = join(homedir(), 'Library/Application Support/Epsilon/scanner-intake/attachments')
 const DEFAULT_OPENCODE_ENDPOINT = 'http://127.0.0.1:4097'
 const DEFAULT_LAUNCHD_PATH = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
 const DEFAULT_TARGET_LABEL = 'scanner/intake'
@@ -77,6 +79,7 @@ export function resolveScannerIntakeServiceConfig(argv: string[], env: NodeJS.Pr
     gmailScope: env.SCANNER_GMAIL_SCOPE ?? GMAIL_READONLY_SCOPE,
     targetLabel: env.SCANNER_TARGET_LABEL ?? DEFAULT_TARGET_LABEL,
     gmailQuery: env.SCANNER_GMAIL_QUERY ?? `label:${env.SCANNER_TARGET_LABEL ?? DEFAULT_TARGET_LABEL} has:attachment newer_than:30d`,
+    attachmentDownloadDir: env.SCANNER_ATTACHMENT_DOWNLOAD_DIR ?? DEFAULT_ATTACHMENT_DOWNLOAD_DIR,
     gcloudCommand: [
       DEFAULT_GCLOUD_COMMAND[0] ?? '/usr/bin/env',
       'PATH=' + (env.PATH ?? DEFAULT_LAUNCHD_PATH),
@@ -95,7 +98,7 @@ export async function runScannerIntakeCli(argv = process.argv.slice(2), env = pr
   const poll_options = {
     source,
     worker,
-    handoff: { gateway, model: config.opencodeModel, costBudgetCents: 25, timeoutMs: 5 * 60 * 1000 },
+    handoff: { gateway, model: config.opencodeModel, costBudgetCents: 75, timeoutMs: 10 * 60 * 1000 },
     filters: { targetLabel: config.targetLabel, hasAttachment: true, subject: /ricoh|scan|scanner/i },
     auditSink: audit_sink,
   }
@@ -120,6 +123,7 @@ export function createScannerMessageSource(config: ScannerIntakeServiceConfig, a
   return createGmailRestScannerMessageSource({
     accessTokenProvider: accessTokenProvider ?? createScannerAccessTokenProvider(config),
     defaultQuery: config.gmailQuery,
+    attachmentDownloadDir: config.attachmentDownloadDir,
   })
 }
 
