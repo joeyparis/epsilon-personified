@@ -19,7 +19,7 @@ describe('scanner intake service CLI', () => {
     expect(config.opencodeEndpoint).toBe('http://127.0.0.1:4097')
     expect(config.targetLabel).toBe('')
     expect(config.gmailQuery).toBe('from:joey@leadjig.com to:mail@joeyparis.me subject:"Scanned Documents - South Office" has:attachment filename:pdf newer_than:30d')
-    expect(config.opencodeModel).toBe('opencode/gpt-5.5')
+    expect(config.opencodeModel).toBe('openai/gpt-5.5')
     expect(config.sourceMode).toBe('gmail')
     expect(config.authMode).toBe('gcloud')
     expect(config.delegatedUser).toBe('mail@joeyparis.me')

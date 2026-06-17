@@ -20,7 +20,7 @@ export interface ScannerOpenCodeHandoffResult {
   result?: DelegationSubmitResult
 }
 
-export const DEFAULT_SCANNER_HANDOFF_MODEL = 'opencode/gpt-5.5'
+export const DEFAULT_SCANNER_HANDOFF_MODEL = 'openai/gpt-5.5'
 const DEFAULT_SCANNER_HANDOFF_TIMEOUT_MS = 10 * 60 * 1000
 const DEFAULT_SCANNER_HANDOFF_COST_CENTS = 75
 

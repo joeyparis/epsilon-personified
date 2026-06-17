@@ -13,7 +13,7 @@ describe('scanner launchd assets', () => {
     expect(plist).toContain('<key>PATH</key>')
     expect(plist).toContain('/Users/joey/.opencode/bin:/Users/joey/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin')
     expect(plist).toContain('<key>SCANNER_OPENCODE_MODEL</key>')
-    expect(plist).toContain('opencode/gpt-5.5')
+    expect(plist).toContain('openai/gpt-5.5')
     expect(plist).toContain('<key>SCANNER_SOURCE_MODE</key>')
     expect(plist).toContain('gmail')
     expect(plist).toContain('<key>SCANNER_AUTH_MODE</key>')
