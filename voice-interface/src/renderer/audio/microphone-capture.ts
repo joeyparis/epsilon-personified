@@ -1,6 +1,8 @@
 export interface MicrophoneCapture {
   readonly trackCount: number
   readonly active: boolean
+  readonly stream?: MediaStream
+  readonly audioTrack?: MediaStreamTrack
   stop: () => void
 }
 
@@ -8,7 +10,7 @@ export interface MicrophoneCaptureAdapter {
   start: () => Promise<MicrophoneCapture>
 }
 
-type CapturableMediaStream = Pick<MediaStream, 'getTracks'>
+type CapturableMediaStream = Pick<MediaStream, 'getTracks' | 'getAudioTracks'>
 type CapturableMediaDevices = Pick<MediaDevices, 'getUserMedia'>
 
 export function createBrowserMicrophoneCaptureAdapter(
@@ -29,9 +31,12 @@ export function createBrowserMicrophoneCaptureAdapter(
 export function createMediaStreamCapture(stream: CapturableMediaStream): MicrophoneCapture {
   let activeStream: CapturableMediaStream | null = stream
   const trackCount = stream.getTracks().length
+  const audioTrack = stream.getAudioTracks()[0]
 
   return {
     trackCount,
+    stream: stream as MediaStream,
+    audioTrack,
     get active() {
       return activeStream !== null
     },
