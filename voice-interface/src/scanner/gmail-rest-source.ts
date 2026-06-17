@@ -49,7 +49,7 @@ interface GmailAttachmentResponse {
   size?: number
 }
 
-export const DEFAULT_GMAIL_SCANNER_QUERY = 'label:scanner/intake has:attachment newer_than:30d'
+export const DEFAULT_GMAIL_SCANNER_QUERY = 'from:joey@leadjig.com to:mail@joeyparis.me subject:"Scanned Documents - South Office" has:attachment filename:pdf newer_than:30d'
 
 export function createGmailRestScannerMessageSource(options: GmailRestScannerMessageSourceOptions): ScannerMessageSource {
   const fetcher = options.fetcher ?? defaultGmailRestFetcher

@@ -91,6 +91,27 @@ describe('gmail REST scanner source', () => {
 
     expect(records.map((record) => record.id)).toEqual(['matched'])
   })
+
+  it('does not require a scanner label when the local target-label filter is empty', async () => {
+    const fetcher: GmailRestFetcher = async (url, init) => {
+      expect(init.method).toBe('GET')
+      if (url.includes('/messages?')) return jsonResponse({ messages: [{ id: 'south-office-scan' }] })
+      return jsonResponse({
+        id: 'south-office-scan',
+        labelIds: ['UNREAD', 'CATEGORY_PERSONAL', 'INBOX'],
+        payload: {
+          headers: [{ name: 'From', value: 'Joey Paris <joey@leadjig.com>' }, { name: 'Subject', value: 'FW: Scanned Documents - South Office' }],
+          parts: [{ filename: '20260617150509525.pdf', mimeType: 'application/pdf', body: { attachmentId: 'a1', size: 7 } }],
+        },
+      })
+    }
+    const source = createGmailRestScannerMessageSource({ accessTokenProvider: async () => 'token', fetcher })
+
+    const records = await source.searchScannerMessages({ targetLabel: '', hasAttachment: true })
+
+    expect(records).toHaveLength(1)
+    expect(records[0]?.labels).toEqual(['UNREAD', 'CATEGORY_PERSONAL', 'INBOX'])
+  })
 })
 
 function jsonResponse(value: unknown) {
