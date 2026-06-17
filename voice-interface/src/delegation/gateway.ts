@@ -40,6 +40,7 @@ export interface DelegationClock {
 }
 
 type InternalDelegationJob = DelegationJobSnapshot & {
+  promptText: string
   process?: ManagedWorkerProcess
   timeoutHandle?: ReturnType<typeof setTimeout>
   settled: boolean
@@ -181,7 +182,9 @@ export class DelegationGateway {
   }
 
   private createJob(request: DelegationJobRequest, profile: DelegationModelProfile): InternalDelegationJob {
+    const promptMode = request.promptMode ?? 'bounded'
     const promptSummary = sanitizePromptSummary(request.promptSummary, this.maxPromptSummaryChars)
+    const promptText = promptMode === 'direct' ? sanitizeDirectPrompt(request.promptSummary) : promptSummary
     const timeoutMs = Math.max(1, Math.min(request.timeoutMs ?? this.defaultTimeoutMs, this.defaultTimeoutMs))
     const id = `delegation-${this.idFactory()}`
     const now = this.isoNow()
@@ -190,9 +193,11 @@ export class DelegationGateway {
       id,
       parentVoiceTurnId: sanitizeIdentifier(request.parentVoiceTurnId),
       promptSummary,
+      promptText,
       model: request.model,
       profile,
       endpoint: this.endpoint,
+      promptMode,
       status: 'queued',
       startTime: null,
       createdAt: now,
@@ -222,7 +227,7 @@ export class DelegationGateway {
     job.startTime = job.startedAt
     job.updatedAt = job.startedAt
     job.statusMessage = 'Delegation running.'
-    const prompt = buildBoundedOpenCodePrompt(job)
+    const prompt = buildOpenCodePrompt(job)
     const args = ['run', '--attach', this.endpoint, '-m', job.model, prompt]
     job.workerCommand = ['opencode', ...args]
     this.setStatus?.(AppState.Delegated, 'Delegation running.', `${job.id}: ${job.promptSummary}`)
@@ -308,7 +313,7 @@ export class DelegationGateway {
   }
 
   private snapshot(job: InternalDelegationJob): DelegationJobSnapshot {
-    const { process: _process, timeoutHandle: _timeoutHandle, settled: _settled, cancellationCount: _cancellationCount, ...snapshot } = job
+    const { promptText: _promptText, process: _process, timeoutHandle: _timeoutHandle, settled: _settled, cancellationCount: _cancellationCount, ...snapshot } = job
     return { ...snapshot }
   }
 
@@ -344,6 +349,15 @@ export function buildBoundedOpenCodePrompt(job: DelegationJobSnapshot): string {
     '',
     'Safety contract: use only this summary. Do not request or infer raw audio, full transcripts, full Church context, full OpenViking memory, email bodies, service raw responses, secrets, writes, sends, mutations, devices, arbitrary sessions, or unbounded agents. Return a concise final summary for the voice UI.',
   ].join('\n')
+}
+
+function buildOpenCodePrompt(job: InternalDelegationJob): string {
+  if (job.promptMode === 'direct') return job.promptText
+  return buildBoundedOpenCodePrompt(job)
+}
+
+function sanitizeDirectPrompt(prompt: string): string {
+  return prompt.replace(/\r\n?/g, '\n').trim() || 'No direct delegation prompt provided.'
 }
 
 export function sanitizePromptSummary(summary: string, maxChars = DEFAULT_MAX_PROMPT_SUMMARY_CHARS): string {

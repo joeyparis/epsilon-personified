@@ -121,6 +121,43 @@ describe('delegation raw-context redaction', () => {
     expect(sanitized).not.toContain('\n')
     expect(sanitized).not.toContain('\t')
   })
+
+  it('allows scanner jobs to use direct Church prompts without the bounded wrapper', async () => {
+    const runner = new PromptCaptureRunner()
+    const gateway = new DelegationGateway({
+      endpoint: 'http://localhost:4097',
+      processRunner: runner,
+      healthChecker: { isAvailable: async () => true },
+      idFactory: () => 'direct-prompt-test',
+      maxPromptSummaryChars: 120,
+    })
+    const final_document_path = '/Users/joey/Library/Application Support/Epsilon/scanner-intake/attachments/final-scan.pdf'
+    const prompt = [
+      '/church Analyze /Users/joey/Library/Application Support/Epsilon/scanner-intake/attachments/scan.pdf',
+      'Open the local document file path and organize it for Joey.',
+      'Repeat safe metadata filler. '.repeat(20),
+      `Document local path: ${final_document_path}`,
+    ].join('\n')
+
+    const result = await gateway.delegate({
+      parentVoiceTurnId: 'scanner:gmail:message:gmail-1',
+      promptSummary: prompt,
+      promptMode: 'direct',
+      model: 'opencode/gpt-5.5',
+      profile: 'standard',
+      timeoutMs: 100,
+      costBudgetCents: 75,
+    })
+
+    expect(runner.prompt).toContain('/church Analyze')
+    expect(runner.prompt).toContain('/Users/joey/Library/Application Support/Epsilon/scanner-intake/attachments/scan.pdf')
+    expect(runner.prompt).toContain(final_document_path)
+    expect(runner.prompt).not.toContain('Epsilon voice bounded delegation request.')
+    expect(runner.prompt).not.toContain('Safety contract:')
+    expect(result.job.promptSummary.length).toBeLessThanOrEqual(120)
+    expect(result.job.promptSummary).not.toContain(final_document_path)
+  })
+
 })
 
 class PromptCaptureRunner implements ProcessRunner {

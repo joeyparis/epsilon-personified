@@ -34,9 +34,12 @@ export interface DelegationRequest {
   costBudgetCents?: number
 }
 
+export type DelegationPromptMode = 'bounded' | 'direct'
+
 export interface DelegationJobRequest {
   parentVoiceTurnId: string
   promptSummary: string
+  promptMode?: DelegationPromptMode
   model: string
   profile?: DelegationProfile
   timeoutMs?: number
@@ -68,6 +71,7 @@ export interface DelegationJob {
   statusMessage?: string
   degradedReason?: string
   endpoint: string
+  promptMode?: DelegationPromptMode
   workerCommand?: string[]
 }
 
