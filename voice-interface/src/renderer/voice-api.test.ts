@@ -5,7 +5,7 @@ import { getEpsilonVoiceApi } from './voice-api.js'
 
 describe('getEpsilonVoiceApi', () => {
   it('uses the Electron preload API when it exists', () => {
-    const preloadApi: EpsilonVoiceApi = {
+    const preload_api: EpsilonVoiceApi = {
       getStatus: async () => ({ state: AppState.Idle, message: 'preload', updatedAt: 'now' }),
       setState: async (state) => ({ state, message: 'preload', updatedAt: 'now' }),
       publishEvent: async (event) => event,
@@ -15,12 +15,20 @@ describe('getEpsilonVoiceApi', () => {
         message: 'preload test does not mint sessions',
         recoverable: true,
       }),
+      prepareCapabilityAction: async () => { throw new Error('not used') },
+      confirmCapabilityManifest: async () => { throw new Error('not used') },
+      executeCapabilityManifest: async () => { throw new Error('not used') },
+      delegateToOpenCode: async () => { throw new Error('not used') },
+      getDelegationQueue: async () => { throw new Error('not used') },
+      cancelDelegationJob: async () => { throw new Error('not used') },
+      startDelegation: async () => { throw new Error('not used') },
+      getDelegationSnapshot: async () => { throw new Error('not used') },
       onStatusUpdate: () => () => undefined,
       onAppEvent: () => () => undefined,
     }
-    const targetWindow = { epsilonVoice: preloadApi } as Window & { epsilonVoice?: EpsilonVoiceApi }
+    const target_window = { epsilonVoice: preload_api } as Window & { epsilonVoice?: EpsilonVoiceApi }
 
-    expect(getEpsilonVoiceApi(targetWindow)).toBe(preloadApi)
+    expect(getEpsilonVoiceApi(target_window)).toBe(preload_api)
   })
 
   it('creates an in-memory idle API when browser preview has no preload API', async () => {
@@ -57,6 +65,23 @@ describe('getEpsilonVoiceApi', () => {
 
     expect(updates).toEqual([AppState.Thinking])
     await expect(api.getStatus()).resolves.toMatchObject({ state: AppState.Speaking })
+  })
+
+  it('keeps browser-preview OpenCode delegation bounded even when direct mode is requested', async () => {
+    const api = getEpsilonVoiceApi({} as Window & { epsilonVoice?: EpsilonVoiceApi })
+
+    const result = await api.delegateToOpenCode({
+      parentVoiceTurnId: 'renderer-turn',
+      promptSummary: '/church raw direct prompt from renderer',
+      promptMode: 'direct',
+      model: 'opencode/gpt-5.5',
+      profile: 'standard',
+      timeoutMs: 100,
+      costBudgetCents: 75,
+    })
+
+    expect(result.job.promptMode).toBe('bounded')
+    expect(result.job.promptSummary).toContain('/church raw direct prompt')
   })
 })
 

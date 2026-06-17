@@ -2,7 +2,7 @@ import { app, BrowserWindow, Menu, Tray, globalShortcut, ipcMain, nativeImage, s
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { CapabilityGateway } from '../capabilities/gateway.js'
-import { DelegationGateway } from '../delegation/gateway.js'
+import { DelegationGateway, forceBoundedDelegationRequest } from '../delegation/gateway.js'
 import { createFaceStatusEvent, createStateChangedEvent, normalizeAppEvent } from '../events/app-events.js'
 import { createDegradedStatus } from '../shared/degraded-mode.js'
 import type { CapabilityConfirmation, CapabilityManifest, ConfirmationInput, PrepareCapabilityRequest } from '../shared/capability-types.js'
@@ -170,7 +170,7 @@ function setupIpc() {
     return { accepted: result.accepted, job: result.job, snapshot: result.queue }
   })
   ipcMain.handle(IPC_CHANNELS.GET_DELEGATION_SNAPSHOT, () => delegationGateway.getQueueSnapshot())
-  ipcMain.handle(IPC_CHANNELS.DELEGATE_TO_OPENCODE, (_event, request: DelegationJobRequest) => delegationGateway.delegate(request))
+  ipcMain.handle(IPC_CHANNELS.DELEGATE_TO_OPENCODE, (_event, request: DelegationJobRequest) => delegationGateway.delegate(forceBoundedDelegationRequest(request)))
   ipcMain.handle(IPC_CHANNELS.GET_DELEGATION_QUEUE, () => delegationGateway.getQueueSnapshot())
   ipcMain.handle(IPC_CHANNELS.CANCEL_DELEGATION_JOB, (_event, jobId: unknown) => delegationGateway.cancel(typeof jobId === 'string' ? jobId : '', 'renderer-requested cancellation'))
   ipcMain.handle(IPC_CHANNELS.PUBLISH_EVENT, (_event, event: unknown) => {

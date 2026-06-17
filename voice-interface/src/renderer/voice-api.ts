@@ -121,6 +121,7 @@ export function createDevelopmentVoiceApi(): EpsilonVoiceApi {
         id: `browser-preview-delegation-${crypto.randomUUID()}`,
         parentVoiceTurnId: request.parentVoiceTurnId,
         promptSummary: request.promptSummary.slice(0, 700),
+        promptMode: 'bounded' as const,
         model: request.model,
         profile: request.profile ?? 'standard',
         endpoint: delegationQueue.endpoint,
