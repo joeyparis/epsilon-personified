@@ -23,8 +23,8 @@ The existing metadata-only prompt is too locked down for real scanner intake. It
 - Add `attachmentDownloadDir` to `createGmailRestScannerMessageSource()` and `ScannerIntakeServiceConfig`.
 - For each external Gmail attachment part with `body.attachmentId`, call Gmail readonly `users.messages.attachments.get`, decode Gmail base64url bytes, hash them, and write them to `~/Library/Application Support/Epsilon/scanner-intake/attachments` with sanitized filenames and private file permissions.
 - Preserve inline `body.data` as ignored unless future policy explicitly supports inline MIME bodies.
-- Add `DelegationPromptMode = 'bounded' | 'direct'`. Existing delegation jobs remain `bounded`; scanner handoffs set `promptMode: 'direct'`.
-- Change scanner handoff prompt to start with `/church Analyze and organize the scanned document(s) for Joey.` and include document local paths, safe Gmail refs, sender, subject, filename, MIME type, size, hash, classification, confidence, and scanner questions.
+- Add `DelegationPromptMode = 'bounded' | 'direct'`. Existing delegation jobs remain `bounded`; scanner handoffs set `promptMode: 'direct'`, while renderer-originated generic delegation is forced back to bounded mode.
+- Change scanner handoff prompt to start with `/church Analyze and organize the scanned document(s) for Joey.` and include document local paths, safe Gmail refs, sender, subject, filename, MIME type, size, hash, classification, confidence, and scanner questions. The full direct prompt is kept internal to the worker command path, while snapshots and status surfaces keep a bounded display summary and redact the worker prompt argument.
 
 ## Implementation Plan
 - Update Gmail REST source to download attachments to local files when `attachmentDownloadDir` is configured.

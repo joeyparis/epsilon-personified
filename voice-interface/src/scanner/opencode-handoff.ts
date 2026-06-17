@@ -23,7 +23,6 @@ export interface ScannerOpenCodeHandoffResult {
 export const DEFAULT_SCANNER_HANDOFF_MODEL = 'opencode/gpt-5.5'
 const DEFAULT_SCANNER_HANDOFF_TIMEOUT_MS = 10 * 60 * 1000
 const DEFAULT_SCANNER_HANDOFF_COST_CENTS = 75
-const DEFAULT_MAX_PROMPT_CHARS = 2600
 
 export async function handoffScannerResultToOpenCode(
   process_result: ScannerMessageProcessResult,
@@ -43,7 +42,7 @@ export async function handoffScannerResultToOpenCode(
   return { submitted: true, request, result }
 }
 
-export function buildScannerOpenCodePrompt(process_result: ScannerMessageProcessResult, max_chars = DEFAULT_MAX_PROMPT_CHARS): string {
+export function buildScannerOpenCodePrompt(process_result: ScannerMessageProcessResult, max_chars?: number): string {
   const lines = [
     '/church Analyze and organize the scanned document(s) for Joey.',
     '',
@@ -74,6 +73,7 @@ export function buildScannerOpenCodePrompt(process_result: ScannerMessageProcess
   }
 
   const prompt = lines.join('\n')
+  if (max_chars === undefined) return prompt
   return prompt.length > max_chars ? `${prompt.slice(0, Math.max(0, max_chars - 3))}...` : prompt
 }
 

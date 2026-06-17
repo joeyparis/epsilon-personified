@@ -28,6 +28,19 @@ describe('scanner OpenCode handoff', () => {
     for (const forbidden_value of FORBIDDEN_VALUES) expect(prompt).not.toContain(forbidden_value)
   })
 
+  it('does not truncate Church prompts unless an explicit cap is provided', () => {
+    const long_result = createProcessResult()
+    long_result.attachments[0]!.classification!.unresolvedQuestions = ['tail-marker ' + 'extra scanner context '.repeat(200)]
+
+    const full_prompt = buildScannerOpenCodePrompt(long_result)
+    const capped_prompt = buildScannerOpenCodePrompt(long_result, 180)
+
+    expect(full_prompt).toContain('tail-marker')
+    expect(full_prompt).toContain('extra scanner context')
+    expect(capped_prompt.length).toBeLessThanOrEqual(180)
+    expect(capped_prompt.endsWith('...')).toBe(true)
+  })
+
   it('submits the Church prompt through direct DelegationGateway mode', async () => {
     const requests: DelegationJobRequest[] = []
     const gateway: ScannerDelegationGateway = {
