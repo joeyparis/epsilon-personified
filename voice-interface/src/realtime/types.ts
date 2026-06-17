@@ -1,5 +1,6 @@
 export const DEFAULT_REALTIME_MODEL = 'gpt-realtime-2'
 export const DEFAULT_REALTIME_VOICE = 'marin'
+export const DEFAULT_REALTIME_TRANSCRIPTION_MODEL = 'gpt-4o-transcribe'
 
 export type PushToTalkInputMode = 'press-and-hold' | 'toggle'
 export type RealtimeSessionMode = 'mock' | 'ephemeral'
@@ -22,11 +23,23 @@ export interface RealtimeTurnStart {
   session: SafeRealtimeSession
   inputMode: PushToTalkInputMode
   startedAt: string
+  microphone?: RealtimeTurnMicrophoneSource
+}
+
+export interface RealtimeTurnMicrophoneSource {
+  stream?: MediaStream
+  track?: MediaStreamTrack
 }
 
 export interface RealtimeTurnResult {
   turnId: string
   responseText: string
+}
+
+export interface RealtimeInputTranscript {
+  turnId: string
+  text: string
+  final: boolean
 }
 
 export interface RealtimeClient {

@@ -28,6 +28,8 @@ describe('realtime session minting boundary', () => {
       expect(result.session.sessionId).toMatch(/^rt-/)
     }
     expect(fetchImpl).toHaveBeenCalledOnce()
+    const requestBody = JSON.parse(String(fetchImpl.mock.calls[0][1].body)) as { session?: { audio?: { input?: unknown } } }
+    expect(requestBody.session?.audio?.input).toEqual({ transcription: { model: 'gpt-4o-transcribe' } })
   })
 
   it('enforces one active session and uses the 30 minute renewal fallback', async () => {

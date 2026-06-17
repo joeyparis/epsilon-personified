@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { DEFAULT_REALTIME_MODEL, DEFAULT_REALTIME_VOICE, type RealtimeSessionMintResult } from '../realtime/types.js'
+import { DEFAULT_REALTIME_MODEL, DEFAULT_REALTIME_TRANSCRIPTION_MODEL, DEFAULT_REALTIME_VOICE, type RealtimeSessionMintResult } from '../realtime/types.js'
 import { evaluateCloudSpend, type EstimatedCloudSpend } from '../shared/cost-guardrails.js'
 import { resolvePrivacyCostConfig, type GuardrailApproval, type PrivacyCostConfig } from '../shared/privacy-cost-config.js'
 
@@ -63,6 +63,7 @@ export async function mintRealtimeSessionFromEnv(options: RealtimeSessionMintOpt
 
   const model = env.OPENAI_REALTIME_MODEL ?? DEFAULT_REALTIME_MODEL
   const voice = env.OPENAI_REALTIME_VOICE ?? DEFAULT_REALTIME_VOICE
+  const transcriptionModel = env.OPENAI_REALTIME_TRANSCRIPTION_MODEL ?? DEFAULT_REALTIME_TRANSCRIPTION_MODEL
 
   try {
     const response = await fetchImpl(REALTIME_CLIENT_SECRETS_URL, {
@@ -75,7 +76,10 @@ export async function mintRealtimeSessionFromEnv(options: RealtimeSessionMintOpt
         session: {
           type: 'realtime',
           model,
-          audio: { output: { voice } },
+          audio: {
+            input: { transcription: { model: transcriptionModel } },
+            output: { voice },
+          },
         },
       }),
     })
