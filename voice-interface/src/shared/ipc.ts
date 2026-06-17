@@ -9,6 +9,7 @@ export const IPC_CHANNELS = {
   GET_STATUS: 'epsilon-voice:get-status',
   SET_STATE: 'epsilon-voice:set-state',
   STATUS_UPDATED: 'epsilon-voice:status-updated',
+  PUSH_TO_TALK_HOTKEY: 'epsilon-voice:push-to-talk-hotkey',
   PUBLISH_EVENT: 'epsilon-voice:publish-event',
   EVENT_PUBLISHED: 'epsilon-voice:event-published',
   REQUEST_REALTIME_SESSION: 'epsilon-voice:request-realtime-session',
@@ -37,4 +38,5 @@ export interface EpsilonVoiceApi {
   getDelegationSnapshot: () => Promise<DelegationSnapshot>
   onStatusUpdate: (callback: (snapshot: StatusSnapshot) => void) => () => void
   onAppEvent: (callback: (event: AppEvent) => void) => () => void
+  onPushToTalkHotkey: (callback: () => void) => () => void
 }

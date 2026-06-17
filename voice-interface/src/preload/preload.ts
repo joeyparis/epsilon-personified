@@ -30,6 +30,11 @@ const api: EpsilonVoiceApi = {
     ipcRenderer.on(IPC_CHANNELS.EVENT_PUBLISHED, listener)
     return () => ipcRenderer.removeListener(IPC_CHANNELS.EVENT_PUBLISHED, listener)
   },
+  onPushToTalkHotkey: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on(IPC_CHANNELS.PUSH_TO_TALK_HOTKEY, listener)
+    return () => ipcRenderer.removeListener(IPC_CHANNELS.PUSH_TO_TALK_HOTKEY, listener)
+  },
 }
 
 contextBridge.exposeInMainWorld('epsilonVoice', api)

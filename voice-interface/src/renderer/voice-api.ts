@@ -150,6 +150,7 @@ export function createDevelopmentVoiceApi(): EpsilonVoiceApi {
       return () => listeners.delete(callback)
     },
     onAppEvent: (callback) => eventBus.subscribe(callback),
+    onPushToTalkHotkey: () => () => undefined,
   }
 }
 
@@ -174,4 +175,8 @@ export function getEpsilonVoiceApi(targetWindow: WindowWithOptionalVoiceApi): Ep
   const api = createDevelopmentVoiceApi()
   targetWindow.epsilonVoice = api
   return api
+}
+
+export function hasEpsilonVoicePreloadApi(targetWindow: WindowWithOptionalVoiceApi): boolean {
+  return targetWindow.epsilonVoice !== undefined
 }
