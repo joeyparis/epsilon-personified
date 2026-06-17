@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { DelegationGateway } from '../delegation/gateway.js'
 import { safeLogLine } from '../shared/log-redaction.js'
-import { createGmailRestScannerMessageSource, type GmailAccessTokenProvider } from './gmail-rest-source.js'
+import { createGmailRestScannerMessageSource, DEFAULT_GMAIL_SCANNER_QUERY, type GmailAccessTokenProvider } from './gmail-rest-source.js'
 import { createJsonFileScannerIdempotencyStore, createMemoryScannerMessageSource, createScannerWorker, type ScannerAuditEntry, type ScannerAuditSink, type ScannerMessageSource, type ScannerWorker } from './intake.js'
 import { DEFAULT_SCANNER_HANDOFF_MODEL, type ScannerDelegationGateway } from './opencode-handoff.js'
 import { createIamSignJwtWorkspaceAccessTokenProvider, createWorkspaceServiceAccountAccessTokenProvider, DEFAULT_WORKSPACE_DELEGATED_USER, GMAIL_READONLY_SCOPE } from './workspace-service-account-auth.js'
@@ -49,7 +49,7 @@ const DEFAULT_ERROR_LOG_PATH = join(homedir(), 'Library/Logs/epsilon-scanner-int
 const DEFAULT_ATTACHMENT_DOWNLOAD_DIR = join(homedir(), 'Library/Application Support/Epsilon/scanner-intake/attachments')
 const DEFAULT_OPENCODE_ENDPOINT = 'http://127.0.0.1:4097'
 const DEFAULT_LAUNCHD_PATH = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
-const DEFAULT_TARGET_LABEL = 'scanner/intake'
+const DEFAULT_TARGET_LABEL = ''
 const DEFAULT_SERVICE_ACCOUNT_KEY_PATH = join(homedir(), '.config/Epsilon/scanner-intake/moi-gmail-scanner-service-account.json')
 const DEFAULT_SCANNER_SERVICE_ACCOUNT_EMAIL = 'moi-gmail-scanner@epsilon-490315.iam.gserviceaccount.com'
 const DEFAULT_GCLOUD_COMMAND = [
@@ -78,7 +78,7 @@ export function resolveScannerIntakeServiceConfig(argv: string[], env: NodeJS.Pr
     delegatedUser: env.SCANNER_GOOGLE_DELEGATED_USER ?? DEFAULT_WORKSPACE_DELEGATED_USER,
     gmailScope: env.SCANNER_GMAIL_SCOPE ?? GMAIL_READONLY_SCOPE,
     targetLabel: env.SCANNER_TARGET_LABEL ?? DEFAULT_TARGET_LABEL,
-    gmailQuery: env.SCANNER_GMAIL_QUERY ?? `label:${env.SCANNER_TARGET_LABEL ?? DEFAULT_TARGET_LABEL} has:attachment newer_than:30d`,
+    gmailQuery: env.SCANNER_GMAIL_QUERY ?? DEFAULT_GMAIL_SCANNER_QUERY,
     attachmentDownloadDir: env.SCANNER_ATTACHMENT_DOWNLOAD_DIR ?? DEFAULT_ATTACHMENT_DOWNLOAD_DIR,
     gcloudCommand: [
       DEFAULT_GCLOUD_COMMAND[0] ?? '/usr/bin/env',
@@ -99,7 +99,7 @@ export async function runScannerIntakeCli(argv = process.argv.slice(2), env = pr
     source,
     worker,
     handoff: { gateway, model: config.opencodeModel, costBudgetCents: 75, timeoutMs: 10 * 60 * 1000 },
-    filters: { targetLabel: config.targetLabel, hasAttachment: true, subject: /ricoh|scan|scanner/i },
+    filters: { targetLabel: config.targetLabel, hasAttachment: true, subject: /\b(?:ricoh|scan(?:ned|ner)?|scanned documents)\b/i },
     auditSink: audit_sink,
   }
 

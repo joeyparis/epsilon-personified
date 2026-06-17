@@ -17,7 +17,8 @@ describe('scanner intake service CLI', () => {
     expect(config.errorLogPath).toContain('Library/Logs/epsilon-scanner-intake-error.log')
     expect(config.attachmentDownloadDir).toContain('Library/Application Support/Epsilon/scanner-intake/attachments')
     expect(config.opencodeEndpoint).toBe('http://127.0.0.1:4097')
-    expect(config.targetLabel).toBe('scanner/intake')
+    expect(config.targetLabel).toBe('')
+    expect(config.gmailQuery).toBe('from:joey@leadjig.com to:mail@joeyparis.me subject:"Scanned Documents - South Office" has:attachment filename:pdf newer_than:30d')
     expect(config.opencodeModel).toBe('opencode/gpt-5.5')
     expect(config.sourceMode).toBe('gmail')
     expect(config.authMode).toBe('gcloud')
@@ -108,6 +109,38 @@ describe('scanner intake service CLI', () => {
     expect(log).not.toContain('PRIVATE_EMAIL_BODY')
     expect(log).not.toContain('PRIVATE_ATTACHMENT_TEXT')
     expect(requests[0]?.promptSummary).not.toContain('PRIVATE_ATTACHMENT_TEXT')
+  })
+
+  it('hands off forwarded South Office scanned documents without a scanner label', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'epsilon-scanner-service-forwarded-'))
+    const requests: DelegationJobRequest[] = []
+    const exit_codes: number[] = []
+    const source = createMemoryScannerMessageSource([{
+      id: 'gmail-scan-1',
+      from: 'Joey Paris <joey@leadjig.com>',
+      subject: 'FW: Scanned Documents - South Office',
+      labels: ['UNREAD', 'CATEGORY_PERSONAL', 'INBOX'],
+      receivedAt: '2026-06-17T19:05:32.000Z',
+      attachments: [{ id: 'attach-1', filename: '20260617150509525.pdf', mimeType: 'application/pdf', contentBase64: 'JVBERi0=', sizeBytes: 7 }],
+    }])
+    const worker = createScannerWorker({ idempotencyStore: createMemoryScannerIdempotencyStore() })
+    const gateway: ScannerDelegationGateway = {
+      delegate: async (request) => {
+        requests.push(request)
+        return { accepted: true, job: createJob(request), queue: createQueue() }
+      },
+    }
+
+    await runScannerIntakeCli(['--once'], {
+      SCANNER_LOG_PATH: join(dir, 'scanner.log'),
+      SCANNER_ERROR_LOG_PATH: join(dir, 'scanner-error.log'),
+      SCANNER_STATE_PATH: join(dir, 'state.json'),
+    }, { source, worker, gateway, exit: (code) => exit_codes.push(code) })
+
+    expect(exit_codes).toEqual([0])
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.promptSummary).toContain('FW: Scanned Documents - South Office')
+    expect(requests[0]?.promptSummary).toContain('20260617150509525.pdf')
   })
 
   it('sets process exit code for real --once failures without injected exit callback', async () => {
