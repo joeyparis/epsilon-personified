@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 
 export interface WorkerProcessResult {
   exitCode: number | null
@@ -19,7 +20,7 @@ export const nodeProcessRunner: ProcessRunner = {
   run(command, args) {
     const child = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      env: resolveWorkerEnv(command),
     })
     let stdout = ''
     let stderr = ''
@@ -40,4 +41,15 @@ export const nodeProcessRunner: ProcessRunner = {
       },
     }
   },
+}
+
+export function resolveWorkerEnv(command: string, env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const worker_env = { ...env }
+  if (command !== 'opencode' || worker_env.OPENCODE_SERVER_PASSWORD) return worker_env
+
+  const password_path = worker_env.OPENCODE_SERVER_PASSWORD_FILE ?? '/Users/joey/.local/share/opencode/moi-server-password'
+  if (existsSync(password_path)) {
+    worker_env.OPENCODE_SERVER_PASSWORD = readFileSync(password_path, 'utf8').trim()
+  }
+  return worker_env
 }
