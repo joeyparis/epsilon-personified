@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { DelegationGateway, sanitizePromptSummary } from './gateway.js'
+import { DelegationGateway, forceBoundedDelegationRequest, sanitizePromptSummary } from './gateway.js'
 import type { ProcessRunner, WorkerProcessResult } from './process-runner.js'
 
 const UNAVAILABLE_EVIDENCE = '/Users/joey/Church/.omo/evidence/task-7-opencode-unavailable.txt'
@@ -156,6 +156,23 @@ describe('delegation raw-context redaction', () => {
     expect(runner.prompt).not.toContain('Safety contract:')
     expect(result.job.promptSummary.length).toBeLessThanOrEqual(120)
     expect(result.job.promptSummary).not.toContain(final_document_path)
+    expect(result.job.workerCommand).toContain('[prompt redacted]')
+    expect(result.job.workerCommand?.join(' ')).not.toContain(final_document_path)
+  })
+
+  it('forces renderer-originated direct requests back to bounded mode', () => {
+    const bounded_request = forceBoundedDelegationRequest({
+      parentVoiceTurnId: 'renderer-turn',
+      promptSummary: '/church direct prompt should not leave renderer generic IPC',
+      promptMode: 'direct',
+      model: 'opencode/gpt-5.5',
+      profile: 'standard',
+      timeoutMs: 100,
+      costBudgetCents: 75,
+    })
+
+    expect(bounded_request.promptMode).toBe('bounded')
+    expect(bounded_request.promptSummary).toContain('/church direct prompt')
   })
 
 })

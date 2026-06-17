@@ -229,7 +229,7 @@ export class DelegationGateway {
     job.statusMessage = 'Delegation running.'
     const prompt = buildOpenCodePrompt(job)
     const args = ['run', '--attach', this.endpoint, '-m', job.model, prompt]
-    job.workerCommand = ['opencode', ...args]
+    job.workerCommand = ['opencode', 'run', '--attach', this.endpoint, '-m', job.model, '[prompt redacted]']
     this.setStatus?.(AppState.Delegated, 'Delegation running.', `${job.id}: ${job.promptSummary}`)
     this.publishEvent?.({
       type: 'delegation.started',
@@ -332,6 +332,12 @@ export class DelegationGateway {
   private isoNow() {
     return this.clock.now().toISOString()
   }
+}
+
+
+export function forceBoundedDelegationRequest(request: DelegationJobRequest): DelegationJobRequest {
+  const { promptMode: _prompt_mode, ...bounded_request } = request
+  return { ...bounded_request, promptMode: 'bounded' }
 }
 
 export function buildBoundedOpenCodePrompt(job: DelegationJobSnapshot): string {
