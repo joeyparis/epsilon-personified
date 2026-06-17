@@ -11,7 +11,7 @@ describe('scanner launchd assets', () => {
     expect(plist).toContain('com.joey.moi.epsilon-scanner-intake')
     expect(plist).toContain('http://127.0.0.1:4097')
     expect(plist).toContain('<key>PATH</key>')
-    expect(plist).toContain('/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin')
+    expect(plist).toContain('/Users/joey/.opencode/bin:/Users/joey/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin')
     expect(plist).toContain('<key>SCANNER_OPENCODE_MODEL</key>')
     expect(plist).toContain('opencode/gpt-5.5')
     expect(plist).toContain('<key>SCANNER_SOURCE_MODE</key>')
