@@ -1,6 +1,7 @@
 import { createLocalAcknowledgement, type LocalAcknowledgement } from '../../audio/local-ack.js'
 import { createEventMeta, type AppEvent, type AppEventMeta } from '../../events/app-events.js'
 import { createBrowserMicrophoneCaptureAdapter, type MicrophoneCapture, type MicrophoneCaptureAdapter } from './microphone-capture.js'
+import { createAudioLevelMeter, type AudioLevelMeter, type AudioLevelMeterOptions } from './audio-level-meter.js'
 import { createMockRealtimeSession } from '../../realtime/mock-client.js'
 import type { PushToTalkInputMode, RealtimeClient, RealtimeSessionMintResult, SafeRealtimeSession } from '../../realtime/session.js'
 import { createDegradedStatus } from '../../shared/degraded-mode.js'
@@ -20,6 +21,8 @@ export interface PushToTalkClock {
   date: () => Date
 }
 
+export type AudioLevelMeterFactory = (options: AudioLevelMeterOptions) => AudioLevelMeter
+
 export interface PushToTalkControllerOptions {
   realtimeClient: RealtimeClient
   requestSession?: () => Promise<RealtimeSessionMintResult>
@@ -28,6 +31,7 @@ export interface PushToTalkControllerOptions {
   onSnapshot?: (snapshot: PushToTalkSnapshot) => void
   onAcknowledgement?: (acknowledgement: LocalAcknowledgement) => void
   microphoneCapture?: MicrophoneCaptureAdapter
+  audioLevelMeterFactory?: AudioLevelMeterFactory
   clock?: PushToTalkClock
   source?: AppEventMeta['source']
 }
@@ -39,6 +43,8 @@ interface ActiveTurn {
   startedAtMs: number
   session?: SafeRealtimeSession
   capture?: MicrophoneCapture
+  levelMeter?: AudioLevelMeter
+  realtimeStarted?: boolean
 }
 
 const DEFAULT_MOCK_SESSION_RESULT: RealtimeSessionMintResult = {
@@ -67,6 +73,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
   const source = options.source ?? 'renderer'
   const requestSession = options.requestSession ?? (async () => DEFAULT_MOCK_SESSION_RESULT)
   const microphoneCapture = options.microphoneCapture ?? createBrowserMicrophoneCaptureAdapter()
+  const createLevelMeter = options.audioLevelMeterFactory ?? createAudioLevelMeter
   let activeTurn: ActiveTurn | null = null
   let lastSnapshot: PushToTalkSnapshot = { phase: 'idle' }
 
@@ -97,8 +104,24 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     })
   }
 
-  function stopCapture(turn: ActiveTurn | null) {
-    turn?.capture?.stop()
+  function publishAudioLevel(level: number, muted: boolean) {
+    publish({
+      type: 'audio.level',
+      payload: { level, muted },
+      meta: eventMeta(source),
+    })
+  }
+
+  function stopCapture(turn: ActiveTurn | null, staleCapture?: MicrophoneCapture) {
+    if (turn?.levelMeter) {
+      turn.levelMeter.stop()
+      turn.levelMeter = undefined
+    } else {
+      publishAudioLevel(0, true)
+    }
+
+    const capture = staleCapture ?? turn?.capture
+    capture?.stop()
     if (turn) turn.capture = undefined
   }
 
@@ -154,14 +177,24 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
 
     try {
       const capture = await microphoneCapture.start()
-      if (!activeTurn || activeTurn.turnId !== turnId) {
-        capture.stop()
+      if (!activeTurn || activeTurn.turnId !== turnId || activeTurn.phase !== 'listening') {
+        stopCapture(null, capture)
         return acknowledgement
       }
       activeTurn.capture = capture
+      if (capture.stream) {
+        const levelMeter = createLevelMeter({
+          publishLevel: (payload) => publishAudioLevel(payload.level, payload.muted),
+        })
+        activeTurn.levelMeter = levelMeter
+        levelMeter.start(capture.stream)
+      } else {
+        publishAudioLevel(0, true)
+      }
       publishCaptureState(true, inputMode)
     } catch (error) {
       if (activeTurn?.turnId !== turnId) return acknowledgement
+      stopCapture(activeTurn)
       activeTurn = null
       publishCaptureState(false, 'capture-failed')
       publish({
@@ -180,7 +213,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     }
 
     const sessionResult = await requestSession()
-    if (!activeTurn || activeTurn.turnId !== turnId) return acknowledgement
+    if (!activeTurn || activeTurn.turnId !== turnId || activeTurn.phase !== 'listening') return acknowledgement
 
     if (!sessionResult.ok) {
       publish({
@@ -200,12 +233,41 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     }
 
     activeTurn.session = sessionResult.session
-    await options.realtimeClient.beginTurn({
-      turnId,
-      session: sessionResult.session,
-      inputMode,
-      startedAt: clock.date().toISOString(),
-    })
+    try {
+      await options.realtimeClient.beginTurn({
+        turnId,
+        session: sessionResult.session,
+        inputMode,
+        startedAt: clock.date().toISOString(),
+        microphone: {
+          stream: activeTurn.capture?.stream,
+          track: activeTurn.capture?.audioTrack,
+        },
+      })
+      if (!activeTurn || activeTurn.turnId !== turnId || activeTurn.phase !== 'listening') {
+        await options.realtimeClient.cancelTurn(turnId, 'turn-no-longer-listening')
+        return acknowledgement
+      }
+      activeTurn.realtimeStarted = true
+    } catch (error) {
+      if (activeTurn?.turnId !== turnId) return acknowledgement
+      stopCapture(activeTurn)
+      activeTurn = null
+      publishCaptureState(false, 'realtime-begin-failed')
+      publish({
+        type: 'realtime.error',
+        payload: {
+          code: 'realtime_begin_failed',
+          message: error instanceof Error ? error.message : String(error),
+          recoverable: true,
+        },
+        meta: eventMeta(source),
+      })
+      transition({ phase: 'idle' })
+      const degraded = createDegradedStatus('realtime_unavailable', error instanceof Error ? error.message : String(error))
+      setAppState(degraded.state, degraded.message, degraded.detail)
+      return acknowledgement
+    }
     publish({
       type: 'realtime.turn',
       payload: { turnId, phase: 'started', mode: sessionResult.session.mode },
@@ -222,19 +284,46 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     stopCapture(turn)
     publishCaptureState(false, 'finalized')
     transition({ phase: 'thinking', turnId: turn.turnId, inputMode: turn.inputMode, ackMs: lastSnapshot.ackMs })
-    setAppState(AppState.Thinking, 'Realtime turn finalized.', 'Mock realtime is preparing a spoken response.')
+    setAppState(AppState.Thinking, 'Realtime turn finalized.', 'Preparing a spoken response.')
+    if (!turn.realtimeStarted) {
+      activeTurn = null
+      await options.realtimeClient.cancelTurn(turn.turnId, 'released-before-realtime-started')
+      transition({ phase: 'idle' })
+      setAppState(AppState.Idle, 'Epsilon voice shell is ready.')
+      return null
+    }
     publish({
       type: 'realtime.turn',
       payload: { turnId: turn.turnId, phase: 'committed', mode: turn.session?.mode ?? 'mock' },
       meta: eventMeta(source),
     })
 
-    const result = await options.realtimeClient.commitTurn(turn.turnId)
+    let result
+    try {
+      result = await options.realtimeClient.commitTurn(turn.turnId)
+    } catch (error) {
+      if (activeTurn?.turnId !== turn.turnId) return null
+      activeTurn = null
+      await options.realtimeClient.cancelTurn(turn.turnId, 'commit-failed')
+      publish({
+        type: 'realtime.error',
+        payload: {
+          code: 'realtime_commit_failed',
+          message: error instanceof Error ? error.message : String(error),
+          recoverable: true,
+        },
+        meta: eventMeta(source),
+      })
+      transition({ phase: 'idle' })
+      const degraded = createDegradedStatus('realtime_unavailable', error instanceof Error ? error.message : String(error))
+      setAppState(degraded.state, degraded.message, degraded.detail)
+      return null
+    }
     if (!activeTurn || activeTurn.turnId !== turn.turnId) return result
 
     activeTurn.phase = 'speaking'
     transition({ phase: 'speaking', turnId: turn.turnId, inputMode: turn.inputMode, ackMs: lastSnapshot.ackMs })
-    setAppState(AppState.Speaking, 'Mock realtime response is speaking.', result.responseText)
+    setAppState(AppState.Speaking, 'Realtime response is speaking.', result.responseText)
     publish({
       type: 'realtime.turn',
       payload: { turnId: turn.turnId, phase: 'speaking', mode: turn.session?.mode ?? 'mock' },
@@ -253,6 +342,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     const completedTurn = activeTurn
     stopCapture(completedTurn)
     activeTurn = null
+    await options.realtimeClient.cancelTurn(completedTurn.turnId, 'speaking-complete')
     transition({ phase: 'idle' })
     setAppState(AppState.Idle, 'Epsilon voice shell is ready.')
     publish({
@@ -268,11 +358,7 @@ export function createPushToTalkController(options: PushToTalkControllerOptions)
     toggle,
     interrupt: interruptActiveTurn,
     completeSpeaking,
-    dispose: () => {
-      const turn = activeTurn
-      activeTurn = null
-      stopCapture(turn)
-    },
+    dispose: () => interruptActiveTurn('controller-disposed'),
     getSnapshot: () => lastSnapshot,
   }
 }
