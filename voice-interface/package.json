@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build:electron": "tsc -p tsconfig.main.json",
+    "dev:electron": "node scripts/dev-electron.mjs",
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && vite build",
     "test": "vitest run",
     "test:ui": "vitest --ui",
