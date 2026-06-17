@@ -14,6 +14,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src/audio", "src/capabilities", "src/context", "src/delegation", "src/events", "src/main", "src/preload", "src/realtime", "src/renderer/audio", "src/shared", "src/smoke"],
+  "include": ["src/audio", "src/capabilities", "src/context", "src/delegation", "src/events", "src/main", "src/preload", "src/realtime", "src/renderer/audio", "src/scanner", "src/shared", "src/smoke"],
   "exclude": ["src/**/*.test.ts"]
 }

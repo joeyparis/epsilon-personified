@@ -6,10 +6,13 @@
   "main": "dist-electron/main/main.js",
   "scripts": {
     "dev": "vite",
+    "build:electron": "tsc -p tsconfig.main.json",
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.renderer.json && vite build",
     "test": "vitest run",
     "test:ui": "vitest --ui",
-    "smoke": "node dist-electron/smoke/smoke.js"
+    "smoke": "node dist-electron/smoke/smoke.js",
+    "scanner:intake:once": "node dist-electron/scanner/scanner-intake-service.js --once",
+    "scanner:intake:loop": "node dist-electron/scanner/scanner-intake-service.js"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
