@@ -15,6 +15,7 @@ export interface EpsilonTriggerAttachment {
   mimeType: string
   contentHash: string
   sizeBytes: number
+  localPath?: string
 }
 
 export interface EpsilonTrigger {
@@ -33,6 +34,8 @@ export interface GmailScannerAttachmentRecord {
   mimeType: string
   text?: string
   contentBase64?: string
+  contentHash?: string
+  localPath?: string
   sizeBytes?: number
 }
 
@@ -448,11 +451,12 @@ function normalizeTriggerAttachment(attachment_record: GmailScannerAttachmentRec
     mimeType: normalizeSingleLine(attachment_record.mimeType),
     contentHash: hashAttachmentContent(attachment_record),
     sizeBytes: attachment_record.sizeBytes ?? Buffer.byteLength(attachment_record.text ?? attachment_record.contentBase64 ?? '', 'utf8'),
+    localPath: attachment_record.localPath,
   }
 }
 
 function hashAttachmentContent(attachment_record: GmailScannerAttachmentRecord): string {
-  return hashText([attachment_record.mimeType, attachment_record.text ?? '', attachment_record.contentBase64 ?? ''].join('\n'))
+  return attachment_record.contentHash ?? hashText([attachment_record.mimeType, attachment_record.text ?? '', attachment_record.contentBase64 ?? ''].join('\n'))
 }
 
 function needsOcr(mime_type: string): boolean {

@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import type { GmailScannerAttachmentRecord, GmailScannerMessageRecord, ScannerMessageFilterOptions, ScannerMessageSource } from './intake.js'
 
 export type GmailAccessTokenProvider = () => Promise<string>
@@ -17,6 +20,7 @@ export interface GmailRestScannerMessageSourceOptions {
   baseUrl?: string
   defaultQuery?: string
   maxResults?: number
+  attachmentDownloadDir?: string
 }
 
 interface GmailSearchResponse {
@@ -38,6 +42,11 @@ interface GmailPayloadPart {
   headers?: Array<{ name?: string; value?: string }>
   body?: { attachmentId?: string; size?: number; data?: string }
   parts?: GmailPayloadPart[]
+}
+
+interface GmailAttachmentResponse {
+  data?: string
+  size?: number
 }
 
 export const DEFAULT_GMAIL_SCANNER_QUERY = 'label:scanner/intake has:attachment newer_than:30d'
@@ -66,7 +75,7 @@ export function createGmailRestScannerMessageSource(options: GmailRestScannerMes
           format: 'full',
         })
         const message_json = await getJson<GmailMessageResponse>(fetcher, message_url, token)
-        records.push(mapGmailMessage(message_json, message.threadId))
+        records.push(await mapGmailMessage({ message: message_json, fallbackThreadId: message.threadId, baseUrl: base_url, userId: user_id, token, fetcher, attachmentDownloadDir: options.attachmentDownloadDir }))
       }
 
       return records.filter((record) => matchesLocalOptions(record, filter_options))
@@ -74,42 +83,87 @@ export function createGmailRestScannerMessageSource(options: GmailRestScannerMes
   }
 }
 
-function mapGmailMessage(message: GmailMessageResponse, fallback_thread_id?: string): GmailScannerMessageRecord {
-  const headers = message.payload?.headers ?? []
+async function mapGmailMessage(input: {
+  message: GmailMessageResponse
+  fallbackThreadId?: string
+  baseUrl: string
+  userId: string
+  token: string
+  fetcher: GmailRestFetcher
+  attachmentDownloadDir?: string
+}): Promise<GmailScannerMessageRecord> {
+  const headers = input.message.payload?.headers ?? []
   const from = headerValue(headers, 'from') || 'unknown sender'
   const subject = headerValue(headers, 'subject') || '(no subject)'
   const date_header = headerValue(headers, 'date')
-  const received_at = message.internalDate ? new Date(Number(message.internalDate)).toISOString() : new Date(date_header || 0).toISOString()
+  const received_at = input.message.internalDate ? new Date(Number(input.message.internalDate)).toISOString() : new Date(date_header || 0).toISOString()
+  const message_id = input.message.id ?? 'unknown-message'
 
   return {
-    id: message.id ?? 'unknown-message',
-    threadId: message.threadId ?? fallback_thread_id,
+    id: message_id,
+    threadId: input.message.threadId ?? input.fallbackThreadId,
     from,
     subject,
     receivedAt: received_at,
-    labels: message.labelIds ?? [],
-    attachments: collectAttachments(message.payload),
+    labels: input.message.labelIds ?? [],
+    attachments: await collectAttachments({ payload: input.message.payload, messageId: message_id, baseUrl: input.baseUrl, userId: input.userId, token: input.token, fetcher: input.fetcher, attachmentDownloadDir: input.attachmentDownloadDir }),
   }
 }
 
-function collectAttachments(payload?: GmailPayloadPart): GmailScannerAttachmentRecord[] {
-  if (!payload) return []
+async function collectAttachments(input: {
+  payload?: GmailPayloadPart
+  messageId: string
+  baseUrl: string
+  userId: string
+  token: string
+  fetcher: GmailRestFetcher
+  attachmentDownloadDir?: string
+}): Promise<GmailScannerAttachmentRecord[]> {
+  if (!input.payload) return []
   const attachments: GmailScannerAttachmentRecord[] = []
-  const visit = (part: GmailPayloadPart) => {
+  const visit = async (part: GmailPayloadPart) => {
     const filename = (part.filename ?? '').trim()
     const attachment_id = part.body?.attachmentId
     if (filename && attachment_id) {
-      attachments.push({
-        id: attachment_id,
-        filename,
-        mimeType: part.mimeType ?? 'application/octet-stream',
-        sizeBytes: part.body?.size ?? 0,
-      })
+      attachments.push(await mapAttachment({ part, filename, attachmentId: attachment_id, messageId: input.messageId, baseUrl: input.baseUrl, userId: input.userId, token: input.token, fetcher: input.fetcher, attachmentDownloadDir: input.attachmentDownloadDir }))
     }
-    for (const child_part of part.parts ?? []) visit(child_part)
+    for (const child_part of part.parts ?? []) await visit(child_part)
   }
-  visit(payload)
+  await visit(input.payload)
   return attachments
+}
+
+async function mapAttachment(input: {
+  part: GmailPayloadPart
+  filename: string
+  attachmentId: string
+  messageId: string
+  baseUrl: string
+  userId: string
+  token: string
+  fetcher: GmailRestFetcher
+  attachmentDownloadDir?: string
+}): Promise<GmailScannerAttachmentRecord> {
+  const base_record = {
+    id: input.attachmentId,
+    filename: input.filename,
+    mimeType: input.part.mimeType ?? 'application/octet-stream',
+    sizeBytes: input.part.body?.size ?? 0,
+  }
+  if (!input.attachmentDownloadDir) return base_record
+
+  const attachment_url = buildGmailUrl(input.baseUrl, input.userId, `/messages/${encodeURIComponent(input.messageId)}/attachments/${encodeURIComponent(input.attachmentId)}`, {})
+  const attachment_json = await getJson<GmailAttachmentResponse>(input.fetcher, attachment_url, input.token)
+  const bytes = decodeBase64Url(attachment_json.data ?? '')
+  const content_hash = hashBytes(bytes)
+  const local_path = await writeDownloadedAttachment({ dir: input.attachmentDownloadDir, messageId: input.messageId, attachmentId: input.attachmentId, filename: input.filename, bytes })
+
+  return {
+    ...base_record,
+    sizeBytes: attachment_json.size ?? bytes.byteLength,
+    contentHash: content_hash,
+    localPath: local_path,
+  }
 }
 
 function matchesLocalOptions(record: GmailScannerMessageRecord, options: ScannerMessageFilterOptions): boolean {
@@ -139,6 +193,28 @@ function buildGmailUrl(base_url: string, user_id: string, suffix: string, params
     }
   }
   return url.toString()
+}
+
+async function writeDownloadedAttachment(input: { dir: string; messageId: string; attachmentId: string; filename: string; bytes: Buffer }): Promise<string> {
+  await mkdir(input.dir, { recursive: true, mode: 0o700 })
+  const safe_name = sanitizePathSegment(`${input.messageId}-${input.attachmentId}-${basename(input.filename)}`)
+  const local_path = join(input.dir, safe_name)
+  await writeFile(local_path, input.bytes, { mode: 0o600 })
+  return local_path
+}
+
+function sanitizePathSegment(value: string): string {
+  return value.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/_+/g, '_').slice(0, 180) || 'scanner-attachment'
+}
+
+function decodeBase64Url(value: string): Buffer {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/')
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=')
+  return Buffer.from(padded, 'base64')
+}
+
+function hashBytes(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex')
 }
 
 const defaultGmailRestFetcher: GmailRestFetcher = async (url, init) => fetch(url, init)
