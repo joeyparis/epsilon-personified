@@ -1,5 +1,5 @@
 const REDACTION = '[REDACTED]'
-const SENSITIVE_KEY_RE = /(api[_-]?key|authorization|bearer|token|secret|password|emailbody|messagebody|body|exact_diff_or_payload|transcript|rawaudio|raw_audio|audio|audiobuffer|payload|read_only_service_response|servicerawresponse|rawresponse|serviceresponse|manifest)/i
+const SENSITIVE_KEY_RE = /(api[_-]?key|authorization|bearer|token|secret|password|emailbody|messagebody|body|exact_diff_or_payload|transcript|rawaudio|raw_audio|audio|audiobuffer|payload|read_only_service_response|servicerawresponse|rawresponse|serviceresponse|manifest|attachmenttext|extractedtext|ocrtext|rawattachment|documenttext|scanneremailbody)/i
 const SECRET_PATTERNS = [
   /sk-[A-Za-z0-9_-]{12,}/g,
   /Bearer\s+[A-Za-z0-9._~+/=-]{12,}/gi,

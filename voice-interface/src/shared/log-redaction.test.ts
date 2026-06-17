@@ -11,7 +11,7 @@ async function writeEvidence(content: string) {
 }
 
 describe('log-redaction', () => {
-  it('redacts fake API keys, email bodies, manifest payloads, raw transcripts, and service raw responses', async () => {
+  it('redacts fake API keys, email bodies, manifest payloads, raw transcripts, service raw responses, and scanner text', async () => {
     const unsafe = {
       apiKey: 'sk-fake-task8-redaction-key',
       emailBody: 'Hi Joey, here is a private email body that must not be logged.',
@@ -21,6 +21,12 @@ describe('log-redaction', () => {
       },
       rawTranscript: 'Speaker: Joey said a private transcript snippet.',
       serviceRawResponse: { inbox: ['private message body'] },
+      attachmentText: 'private raw scanner attachment text',
+      extractedText: 'private extracted scanner text',
+      ocrText: 'private OCR scanner text',
+      rawAttachment: 'raw attachment bytes',
+      documentText: 'private document text',
+      scannerEmailBody: 'private scanner email body',
       safeStatus: 'Cost cap reached. Using local read-only mode.',
       nested: { authorization: 'Bearer fake-provider-token-value' },
     }
@@ -35,6 +41,12 @@ describe('log-redaction', () => {
     expect(line).not.toContain('Full manifest payload')
     expect(line).not.toContain('Speaker: Joey')
     expect(line).not.toContain('private message body')
+    expect(line).not.toContain('private raw scanner attachment text')
+    expect(line).not.toContain('private extracted scanner text')
+    expect(line).not.toContain('private OCR scanner text')
+    expect(line).not.toContain('raw attachment bytes')
+    expect(line).not.toContain('private document text')
+    expect(line).not.toContain('private scanner email body')
     expect(JSON.stringify(redacted)).not.toContain('fake-provider-token-value')
 
     await writeEvidence([
@@ -46,6 +58,7 @@ describe('log-redaction', () => {
       'raw manifest payload present: false',
       'raw transcript present: false',
       'raw service response present: false',
+      'raw scanner text present: false',
     ].join('\n'))
   })
 })
