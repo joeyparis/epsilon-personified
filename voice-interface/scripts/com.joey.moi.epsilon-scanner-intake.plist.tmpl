@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joey.moi.epsilon-scanner-intake</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__SERVICE_JS__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>SCANNER_OPENCODE_ENDPOINT</key>
+    <string>http://127.0.0.1:4097</string>
+    <key>SCANNER_OPENCODE_MODEL</key>
+    <string>opencode/glm-5.1</string>
+    <key>SCANNER_SOURCE_MODE</key>
+    <string>gmail</string>
+    <key>SCANNER_AUTH_MODE</key>
+    <string>iam-sign-jwt</string>
+    <key>SCANNER_SERVICE_ACCOUNT_EMAIL</key>
+    <string>moi-gmail-scanner@epsilon-490315.iam.gserviceaccount.com</string>
+    <key>SCANNER_GOOGLE_DELEGATED_USER</key>
+    <string>mail@joeyparis.me</string>
+    <key>SCANNER_GMAIL_SCOPE</key>
+    <string>https://www.googleapis.com/auth/gmail.readonly</string>
+    <key>CLOUDSDK_CONFIG</key>
+    <string>/Users/joey/.config/gcloud-personal</string>
+    <key>GCLOUD_CONFIGURATION</key>
+    <string>personal</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/joey/Library/Logs/epsilon-scanner-intake.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/joey/Library/Logs/epsilon-scanner-intake-error.log</string>
+</dict>
+</plist>
