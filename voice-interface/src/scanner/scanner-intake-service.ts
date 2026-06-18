@@ -3,6 +3,7 @@ import { appendFile, mkdir } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
+import { createMarkdownAutomationHistorySink, type AutomationHistorySink } from '../church/automation-history.js'
 import { DelegationGateway } from '../delegation/gateway.js'
 import { safeLogLine } from '../shared/log-redaction.js'
 import { createGmailRestScannerMessageSource, DEFAULT_GMAIL_SCANNER_QUERY, type GmailAccessTokenProvider } from './gmail-rest-source.js'
@@ -20,6 +21,7 @@ export interface ScannerIntakeServiceConfig {
   statePath: string
   logPath: string
   errorLogPath: string
+  automationHistoryPath: string
   opencodeEndpoint: string
   opencodeModel: string
   sourceMode: ScannerSourceMode
@@ -39,6 +41,7 @@ export interface ScannerIntakeCliDependencies {
   source?: ScannerMessageSource
   worker?: ScannerWorker
   gateway?: ScannerDelegationGateway
+  automationHistorySink?: AutomationHistorySink
   exit?: (code: number) => void
 }
 
@@ -46,6 +49,7 @@ const exec_file = promisify(execFile)
 const DEFAULT_STATE_PATH = join(homedir(), 'Library/Application Support/Epsilon/scanner-intake/state.json')
 const DEFAULT_LOG_PATH = join(homedir(), 'Library/Logs/epsilon-scanner-intake.log')
 const DEFAULT_ERROR_LOG_PATH = join(homedir(), 'Library/Logs/epsilon-scanner-intake-error.log')
+const DEFAULT_AUTOMATION_HISTORY_PATH = join(homedir(), 'Church/notes/automation-history.md')
 const DEFAULT_ATTACHMENT_DOWNLOAD_DIR = join(homedir(), 'Library/Application Support/Epsilon/scanner-intake/attachments')
 const DEFAULT_OPENCODE_ENDPOINT = 'http://127.0.0.1:4097'
 const DEFAULT_LAUNCHD_PATH = '/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin'
@@ -69,6 +73,7 @@ export function resolveScannerIntakeServiceConfig(argv: string[], env: NodeJS.Pr
     statePath: env.SCANNER_STATE_PATH ?? DEFAULT_STATE_PATH,
     logPath: env.SCANNER_LOG_PATH ?? DEFAULT_LOG_PATH,
     errorLogPath: env.SCANNER_ERROR_LOG_PATH ?? DEFAULT_ERROR_LOG_PATH,
+    automationHistoryPath: env.SCANNER_AUTOMATION_HISTORY_PATH ?? DEFAULT_AUTOMATION_HISTORY_PATH,
     opencodeEndpoint: env.SCANNER_OPENCODE_ENDPOINT ?? DEFAULT_OPENCODE_ENDPOINT,
     opencodeModel: env.SCANNER_OPENCODE_MODEL ?? DEFAULT_SCANNER_HANDOFF_MODEL,
     sourceMode: resolveScannerSourceMode(env.SCANNER_SOURCE_MODE),
@@ -95,12 +100,14 @@ export async function runScannerIntakeCli(argv = process.argv.slice(2), env = pr
   const source = dependencies.source ?? createScannerMessageSource(config, dependencies.accessTokenProvider)
   const worker = dependencies.worker ?? createScannerWorker({ idempotencyStore: createJsonFileScannerIdempotencyStore(config.statePath), auditSink: audit_sink })
   const gateway = dependencies.gateway ?? new DelegationGateway({ endpoint: config.opencodeEndpoint })
+  const automation_history_sink = dependencies.automationHistorySink ?? createMarkdownAutomationHistorySink({ path: config.automationHistoryPath })
   const poll_options = {
     source,
     worker,
     handoff: { gateway, model: config.opencodeModel, costBudgetCents: 75, timeoutMs: 10 * 60 * 1000 },
     filters: { targetLabel: config.targetLabel, hasAttachment: true, subject: /\b(?:ricoh|scan(?:ned|ner)?|scanned documents)\b/i },
     auditSink: audit_sink,
+    automationHistorySink: automation_history_sink,
   }
 
   try {

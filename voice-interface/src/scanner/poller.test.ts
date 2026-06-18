@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { DelegationJobRequest, DelegationSubmitResult } from '../shared/delegation-types.js'
-import { createMemoryScannerIdempotencyStore, createMemoryScannerMessageSource, createScannerWorker, type GmailScannerMessageRecord } from './intake.js'
+import { createMemoryScannerIdempotencyStore, createMemoryScannerMessageSource, createScannerWorker, type GmailScannerMessageRecord, type ScannerAuditEntry } from './intake.js'
 import { runScannerPollOnce, startScannerPollLoop, type ScannerPollTimer } from './poller.js'
 import type { ScannerDelegationGateway } from './opencode-handoff.js'
 
 describe('scanner poller', () => {
   it('polls matching Gmail source records, processes scans, and hands off once', async () => {
     const requests: DelegationJobRequest[] = []
+    const history_entries: string[] = []
     const gateway = createGateway(requests)
     const source = createMemoryScannerMessageSource([createMessage('gmail-1')])
     const worker = createScannerWorker({ idempotencyStore: createMemoryScannerIdempotencyStore() })
@@ -15,6 +16,7 @@ describe('scanner poller', () => {
       source,
       worker,
       handoff: { gateway },
+      automationHistorySink: { append: async (entry) => { history_entries.push(JSON.stringify(entry)) } },
       filters: { targetLabel: 'scanner/intake', hasAttachment: true, subject: /ricoh/i },
     })
 
@@ -23,6 +25,9 @@ describe('scanner poller', () => {
     expect(result.handoffCount).toBe(1)
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptSummary).toContain('gmail:message:gmail-1')
+    expect(history_entries).toHaveLength(1)
+    expect(history_entries[0]).toContain('opencode_queued')
+    expect(history_entries[0]).not.toContain('Invoice total $10 private text')
   })
 
   it('does not hand off duplicate idempotent skips on later polls', async () => {
@@ -37,6 +42,55 @@ describe('scanner poller', () => {
 
     expect(second_result.matchedCount).toBe(1)
     expect(second_result.processedCount).toBe(0)
+    expect(second_result.handoffCount).toBe(0)
+    expect(requests).toHaveLength(1)
+  })
+
+  it('commits idempotency when automation history append fails after handoff', async () => {
+    const requests: DelegationJobRequest[] = []
+    const audit_entries: string[] = []
+    const gateway = createGateway(requests)
+    const source = createMemoryScannerMessageSource([createMessage('gmail-history-failure')])
+    const worker = createScannerWorker({ idempotencyStore: createMemoryScannerIdempotencyStore() })
+    const options = {
+      source,
+      worker,
+      handoff: { gateway },
+      automationHistorySink: { append: async () => { throw new Error('history write failed with sk-live-secret-value') } },
+      auditSink: { append: async (entry: ScannerAuditEntry) => { audit_entries.push(JSON.stringify(entry)) } },
+      filters: { targetLabel: 'scanner/intake', hasAttachment: true },
+    }
+
+    const first_result = await runScannerPollOnce(options)
+    const second_result = await runScannerPollOnce(options)
+
+    expect(first_result.errors).toHaveLength(0)
+    expect(first_result.handoffCount).toBe(1)
+    expect(second_result.handoffCount).toBe(0)
+    expect(requests).toHaveLength(1)
+    expect(audit_entries.join('\n')).toContain('automation-history-error')
+    expect(audit_entries.join('\n')).not.toContain('sk-live-secret-value')
+  })
+
+  it('commits idempotency when both automation history and fallback audit append fail', async () => {
+    const requests: DelegationJobRequest[] = []
+    const gateway = createGateway(requests)
+    const source = createMemoryScannerMessageSource([createMessage('gmail-history-and-audit-failure')])
+    const worker = createScannerWorker({ idempotencyStore: createMemoryScannerIdempotencyStore() })
+    const options = {
+      source,
+      worker,
+      handoff: { gateway },
+      automationHistorySink: { append: async () => { throw new Error('history write failed') } },
+      auditSink: { append: async () => { throw new Error('audit write failed') } },
+      filters: { targetLabel: 'scanner/intake', hasAttachment: true },
+    }
+
+    const first_result = await runScannerPollOnce(options)
+    const second_result = await runScannerPollOnce(options)
+
+    expect(first_result.errors).toHaveLength(0)
+    expect(first_result.handoffCount).toBe(1)
     expect(second_result.handoffCount).toBe(0)
     expect(requests).toHaveLength(1)
   })

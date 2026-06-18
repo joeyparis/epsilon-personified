@@ -15,6 +15,7 @@ describe('scanner intake service CLI', () => {
     expect(config.statePath).toContain('Library/Application Support/Epsilon/scanner-intake/state.json')
     expect(config.logPath).toContain('Library/Logs/epsilon-scanner-intake.log')
     expect(config.errorLogPath).toContain('Library/Logs/epsilon-scanner-intake-error.log')
+    expect(config.automationHistoryPath).toContain('Church/notes/automation-history.md')
     expect(config.attachmentDownloadDir).toContain('Library/Application Support/Epsilon/scanner-intake/attachments')
     expect(config.opencodeEndpoint).toBe('http://127.0.0.1:4097')
     expect(config.targetLabel).toBe('')
@@ -97,6 +98,7 @@ describe('scanner intake service CLI', () => {
       SCANNER_LOG_PATH: join(dir, 'scanner.log'),
       SCANNER_ERROR_LOG_PATH: join(dir, 'scanner-error.log'),
       SCANNER_STATE_PATH: join(dir, 'state.json'),
+      SCANNER_AUTOMATION_HISTORY_PATH: join(dir, 'automation-history.md'),
     }, { source, worker, gateway, exit: (code) => exit_codes.push(code) })
 
     const log = await readFile(join(dir, 'scanner.log'), 'utf8')
@@ -109,6 +111,7 @@ describe('scanner intake service CLI', () => {
     expect(log).not.toContain('PRIVATE_EMAIL_BODY')
     expect(log).not.toContain('PRIVATE_ATTACHMENT_TEXT')
     expect(requests[0]?.promptSummary).not.toContain('PRIVATE_ATTACHMENT_TEXT')
+    expect(await readFile(join(dir, 'automation-history.md'), 'utf8')).toContain('RICOH scan invoice')
   })
 
   it('hands off forwarded South Office scanned documents without a scanner label', async () => {
@@ -135,12 +138,16 @@ describe('scanner intake service CLI', () => {
       SCANNER_LOG_PATH: join(dir, 'scanner.log'),
       SCANNER_ERROR_LOG_PATH: join(dir, 'scanner-error.log'),
       SCANNER_STATE_PATH: join(dir, 'state.json'),
+      SCANNER_AUTOMATION_HISTORY_PATH: join(dir, 'automation-history.md'),
     }, { source, worker, gateway, exit: (code) => exit_codes.push(code) })
 
     expect(exit_codes).toEqual([0])
     expect(requests).toHaveLength(1)
     expect(requests[0]?.promptSummary).toContain('FW: Scanned Documents - South Office')
     expect(requests[0]?.promptSummary).toContain('20260617150509525.pdf')
+    const history = await readFile(join(dir, 'automation-history.md'), 'utf8')
+    expect(history).toContain('FW: Scanned Documents - South Office')
+    expect(history).toContain('[REDACTED_NUMBER].pdf')
   })
 
   it('sets process exit code for real --once failures without injected exit callback', async () => {
