@@ -235,7 +235,6 @@ export function createScannerWorker(options: ScannerWorkerOptions): ScannerWorke
         const extraction = await extractAttachmentText(attachment_record, extractors)
         const idempotency_key = createScannerIdempotencyKey({
           messageId: message_record.id,
-          attachmentId: attachment_record.id,
           extractorVersion: extraction.extractorVersion,
           contentHash: attachment.contentHash,
         })
@@ -363,11 +362,10 @@ export function classifyScannerExtraction(input: {
 
 export function createScannerIdempotencyKey(input: {
   messageId: string
-  attachmentId: string
   extractorVersion: string
   contentHash: string
 }): string {
-  return hashText([input.messageId, input.attachmentId, input.extractorVersion, input.contentHash].join('\n'))
+  return hashText([input.messageId, input.extractorVersion, input.contentHash].join('\n'))
 }
 
 export function createMemoryScannerIdempotencyStore(initial_records: ScannerIdempotencyRecord[] = []): ScannerIdempotencyStore {

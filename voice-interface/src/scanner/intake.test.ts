@@ -107,6 +107,25 @@ describe('scanner intake', () => {
     expect(audit_sink.lines.some((line) => line.includes('skipped_duplicate'))).toBe(true)
   })
 
+  it('skips duplicate processing when Gmail returns a different attachment id for the same content', async () => {
+    const worker = createScannerWorker({ idempotencyStore: createMemoryScannerIdempotencyStore() })
+    const first_message = createTextMessage({
+      id: 'gmail-stable-message',
+      attachments: [{ id: 'volatile-attachment-1', filename: 'scan.pdf', mimeType: 'application/pdf', contentBase64: 'JVBERi0x', sizeBytes: 8 }],
+    })
+    const second_message = createTextMessage({
+      id: 'gmail-stable-message',
+      attachments: [{ id: 'volatile-attachment-2', filename: 'scan.pdf', mimeType: 'application/pdf', contentBase64: 'JVBERi0x', sizeBytes: 8 }],
+    })
+
+    const first_result = await worker.processMessage(first_message)
+    await worker.commitMessage(first_result)
+    const second_result = await worker.processMessage(second_message)
+
+    expect(first_result.attachments[0]?.status).toBe('processed')
+    expect(second_result.attachments[0]?.status).toBe('skipped_duplicate')
+  })
+
   it('asks for clarification for PDF and image attachments when no extractor is injected', async () => {
     const church_root = await createChurchFixture()
     const gateway = new CapabilityGateway({ churchRoot: church_root })
