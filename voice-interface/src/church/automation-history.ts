@@ -14,6 +14,7 @@ export interface AutomationHistoryAttachment {
 
 export interface AutomationHistoryEntry {
   occurredAt: string
+  createdAt?: string
   source: string
   kind: string
   title: string
@@ -42,6 +43,7 @@ const MAX_TEXT_CHARS = 900
 const TAX_ID_RE = /\b\d{2}-\d{7}\b/g
 const SSN_RE = /\b\d{3}-\d{2}-\d{4}\b/g
 const LONG_NUMBER_RE = /\b\d{10,}\b/g
+const ISO_TIMESTAMP_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 
 export function createMarkdownAutomationHistorySink(options: MarkdownAutomationHistorySinkOptions): AutomationHistorySink {
   const read_file_text = options.readFileText ?? readUtf8IfPresent
@@ -50,7 +52,7 @@ export function createMarkdownAutomationHistorySink(options: MarkdownAutomationH
   return {
     append: async (entry) => {
       const existing_text = await read_file_text(options.path)
-      const header = existing_text.trim() ? '' : `${HISTORY_HEADING}\n\nHigh-level notes from automated Epsilon/Church processing. Sensitive values are redacted; source systems remain the record of truth.\n`
+      const header = existing_text.trim() ? '' : `${HISTORY_HEADING}\n\nHigh-level notes from automated Epsilon/Church processing. Sensitive values are redacted; source systems remain the record of truth. Entries use Created: for startup recency checks. Add Reviewed: only when Joey explicitly asks Church to stop surfacing an entry.\n`
       await append_file_text(options.path, `${header}${formatAutomationHistoryEntry(entry)}\n`)
     },
   }
@@ -59,8 +61,10 @@ export function createMarkdownAutomationHistorySink(options: MarkdownAutomationH
 export function formatAutomationHistoryEntry(entry: AutomationHistoryEntry): string {
   const title = safeHistoryText(entry.title, 160) || 'Untitled automation event'
   const open_code_summary = entry.openCodeSummary ? extractAutomationSummary(entry.openCodeSummary) : undefined
+  const created_at = normalizeCreatedAt(entry.createdAt)
   const lines = [
     `\n## ${safeHistoryText(entry.occurredAt, 80)} - ${safeHistoryText(entry.source, 80)} - ${title}`,
+    `- Created: ${created_at}`,
     `- Kind: ${safeHistoryText(entry.kind, 120)}`,
     `- Status: ${safeHistoryText(entry.status, 120)}`,
     entry.actor ? `- Actor: ${safeHistoryText(entry.actor, 180)}` : undefined,
@@ -77,6 +81,10 @@ export function formatAutomationHistoryEntry(entry: AutomationHistoryEntry): str
 
 export function createNoopAutomationHistorySink(): AutomationHistorySink {
   return { append: async () => undefined }
+}
+
+function normalizeCreatedAt(value: string | undefined): string {
+  return value && ISO_TIMESTAMP_RE.test(value) ? value : new Date().toISOString()
 }
 
 function formatAttachmentLine(attachment: AutomationHistoryAttachment): string {

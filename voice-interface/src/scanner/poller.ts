@@ -111,6 +111,7 @@ export function createScannerAutomationHistoryEntry(
   const handoff_job = handoff_result.result?.job
   return {
     occurredAt: process_result.trigger.receivedAt,
+    createdAt: new Date().toISOString(),
     source: process_result.trigger.source,
     kind: process_result.trigger.kind,
     title: process_result.trigger.subject,

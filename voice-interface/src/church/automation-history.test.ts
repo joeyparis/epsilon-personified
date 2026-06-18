@@ -5,6 +5,7 @@ describe('automation history', () => {
   it('formats high-level automation entries without leaking secrets or tax IDs', () => {
     const entry = formatAutomationHistoryEntry({
       occurredAt: '2026-06-18T02:07:18.000Z',
+      createdAt: '2026-06-18T03:28:20.877Z',
       source: 'gmail',
       kind: 'ricoh_scan_message',
       title: 'FW: Scanned Documents - South Office sk-live-secret-value',
@@ -27,6 +28,7 @@ describe('automation history', () => {
     })
 
     expect(entry).toContain('FW: Scanned Documents - South Office')
+    expect(entry).toContain('- Created: 2026-06-18T03:28:20.877Z')
     expect(entry).toContain('opencode_completed')
     expect(entry).toContain('[REDACTED]')
     expect(entry).toContain('[REDACTED_TAX_ID]')
@@ -36,6 +38,22 @@ describe('automation history', () => {
     expect(entry).not.toContain('41-5359990')
     expect(entry).not.toContain('123456789012')
     expect(entry).not.toContain('20260617150509525.pdf')
+  })
+
+
+  it('adds a Created timestamp when the caller omits one', () => {
+    const entry = formatAutomationHistoryEntry({
+      occurredAt: '2026-06-18T19:50:49.000Z',
+      source: 'gmail',
+      kind: 'ricoh_scan_message',
+      title: 'FW: Scanned Documents - South Office',
+      contextRefs: ['gmail:message:19edc4970c5d1d34'],
+      status: 'opencode_completed',
+      summary: 'Processed 1 automated attachment.',
+      attachments: [],
+    })
+
+    expect(entry).toMatch(/^- Created: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/m)
   })
 
   it('omits OpenCode final summary text when the automation summary marker is missing', () => {

@@ -27,6 +27,7 @@ describe('scanner poller', () => {
     expect(requests[0]?.promptSummary).toContain('gmail:message:gmail-1')
     expect(history_entries).toHaveLength(1)
     expect(history_entries[0]).toContain('opencode_queued')
+    expect(JSON.parse(history_entries[0] ?? '{}').createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
     expect(history_entries[0]).not.toContain('Invoice total $10 private text')
   })
 
