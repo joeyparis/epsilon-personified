@@ -19,6 +19,7 @@ describe('scanner OpenCode handoff', () => {
     expect(prompt).toContain('Open the local document file path(s) listed below.')
     expect(prompt).toContain('list action items, owners, and due dates')
     expect(prompt).toContain('list questions Joey needs to answer')
+    expect(prompt).toContain('Automation history summary:')
     expect(prompt).toContain('Document local path: /Users/joey/Library/Application Support/Epsilon/scanner-intake/attachments/gmail-1-attach-1-scan.pdf')
     expect(prompt).toContain('gmail:message:gmail-1')
     expect(prompt).toContain('scanner@ricoh.local')
@@ -61,6 +62,18 @@ describe('scanner OpenCode handoff', () => {
     expect(requests[0]?.promptSummary).toContain('Document local path:')
     for (const forbidden_value of FORBIDDEN_VALUES) expect(requests[0]?.promptSummary).not.toContain(forbidden_value)
   })
+
+  it('waits for OpenCode completion when the gateway supports final job snapshots', async () => {
+    const gateway: ScannerDelegationGateway = {
+      delegate: async (request) => ({ accepted: true, job: createJob(request), queue: createQueue() }),
+      waitForJob: async (jobId) => ({ ...createJob({ ...createProcessRequest(), parentVoiceTurnId: 'scanner:gmail:message:gmail-1' }), id: jobId, status: 'completed', finalSummary: 'Scan summarized.' }),
+    }
+
+    const result = await handoffScannerResultToOpenCode(createProcessResult(), { gateway })
+
+    expect(result.result?.job.status).toBe('completed')
+    expect(result.result?.job.finalSummary).toBe('Scan summarized.')
+  })
 })
 
 function createProcessResult(): ScannerMessageProcessResult {
@@ -98,6 +111,15 @@ function createJob(request: DelegationJobRequest): DelegationSubmitResult['job']
     costBudgetCents: request.costBudgetCents,
     cancellationCommand: { kind: 'process-signal', signal: 'SIGTERM', reason: 'test' },
     endpoint: 'http://127.0.0.1:4097',
+  }
+}
+
+function createProcessRequest(): DelegationJobRequest {
+  return {
+    parentVoiceTurnId: 'scanner:gmail:message:gmail-1',
+    promptSummary: 'scan',
+    model: 'openai/gpt-5.5',
+    costBudgetCents: 75,
   }
 }
 

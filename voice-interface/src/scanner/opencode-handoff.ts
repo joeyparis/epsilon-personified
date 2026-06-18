@@ -1,9 +1,10 @@
-import type { DelegationJobRequest, DelegationSubmitResult } from '../shared/delegation-types.js'
+import type { DelegationJobRequest, DelegationJobSnapshot, DelegationSubmitResult } from '../shared/delegation-types.js'
 import { redactForLog } from '../shared/log-redaction.js'
 import type { ScannerMessageProcessResult } from './intake.js'
 
 export interface ScannerDelegationGateway {
   delegate: (request: DelegationJobRequest) => Promise<DelegationSubmitResult>
+  waitForJob?: (jobId: string) => Promise<DelegationJobSnapshot>
 }
 
 export interface ScannerOpenCodeHandoffOptions {
@@ -12,6 +13,7 @@ export interface ScannerOpenCodeHandoffOptions {
   timeoutMs?: number
   costBudgetCents?: number
   maxPromptChars?: number
+  waitForCompletion?: boolean
 }
 
 export interface ScannerOpenCodeHandoffResult {
@@ -39,6 +41,11 @@ export async function handoffScannerResultToOpenCode(
     costBudgetCents: options.costBudgetCents ?? DEFAULT_SCANNER_HANDOFF_COST_CENTS,
   }
   const result = await options.gateway.delegate(request)
+  const should_wait = options.waitForCompletion ?? true
+  if (should_wait && result.accepted && options.gateway.waitForJob) {
+    const completed_job = await options.gateway.waitForJob(result.job.id)
+    return { submitted: true, request, result: { ...result, job: completed_job } }
+  }
   return { submitted: true, request, result }
 }
 
@@ -52,6 +59,8 @@ export function buildScannerOpenCodePrompt(process_result: ScannerMessageProcess
     '- list action items, owners, and due dates if they are present or obvious;',
     '- list questions Joey needs to answer if anything is ambiguous;',
     '- use Church normal safeguards for any proposed write or task update.',
+    '',
+    'Start your final answer with `Automation history summary:` followed by 3-6 concise sentences covering what the document is, why it matters, whether anything is actionable, and whether Joey needs to clarify anything. Keep sensitive identifiers redacted in that summary.',
     '',
     'Do not mutate Gmail. Do not send email. Do not expose secrets. If a document cannot be read, say what capability is missing and what Joey should do next.',
     `Gmail context refs: ${safeJoin(process_result.trigger.contextRefs)}`,
