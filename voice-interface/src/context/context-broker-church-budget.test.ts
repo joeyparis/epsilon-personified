@@ -21,6 +21,8 @@ describe('context-broker-church-budget', () => {
     expect(bundle.source_context_labels).toContain('church:tasks/:tasks/today.md')
     expect(bundle.source_context_labels).toContain('church:projects/epsilon-voice-interface/:projects/epsilon-voice-interface/plan.md')
     expect(bundle.source_context_labels).toContain('church:lists/active-projects.md:lists/active-projects.md')
+    expect(bundle.source_context_labels).toContain('church:notes/automation-history.md:notes/automation-history.md')
+    expect(bundle.promptText).toContain('Recent automated scan summary')
     expect(bundle.promptText).not.toContain('private note should never appear by default')
     expect(bundle.promptText).not.toContain('other project should never appear by default')
     expect(bundle.promptText).not.toContain('full email inbox')
@@ -75,6 +77,7 @@ async function createChurchFixture(): Promise<string> {
   await writeFile(join(churchRoot, 'projects', 'epsilon-voice-interface', 'plan.md'), 'Voice interface control plane status '.repeat(30))
   await writeFile(join(churchRoot, 'projects', 'other-project', 'plan.md'), 'other project should never appear by default')
   await writeFile(join(churchRoot, 'lists', 'active-projects.md'), '- Epsilon Voice Interface active\n')
+  await writeFile(join(churchRoot, 'notes', 'automation-history.md'), 'Recent automated scan summary\n')
   await writeFile(join(churchRoot, 'notes', 'voice-note.md'), 'private note should never appear by default unless requested')
 
   return churchRoot

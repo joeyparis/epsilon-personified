@@ -22,6 +22,7 @@ const DEFAULT_CHURCH_SOURCES: ChurchSource[] = [
   { label: 'church:tasks/', relativePath: 'tasks', recursive: true },
   { label: 'church:projects/epsilon-voice-interface/', relativePath: 'projects/epsilon-voice-interface', recursive: true },
   { label: 'church:lists/active-projects.md', relativePath: 'lists/active-projects.md', recursive: false },
+  { label: 'church:notes/automation-history.md', relativePath: 'notes/automation-history.md', recursive: false },
 ]
 
 const EXPLICIT_CHURCH_PREFIXES = ['notes/', 'projects/']
